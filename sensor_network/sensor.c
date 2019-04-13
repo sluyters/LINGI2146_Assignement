@@ -342,7 +342,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 		case SENSOR_CONTROL:
 			// Check if message is destined to this sensor
 			if (my_id == decoded_msg.payload.destination_id) {
-				// TODO Adapt sensor settings
+				// TODO Adapt sensor setting
 			} else {
 				struct node* child = get_child(decoded_msg.payload.destination_id);
 				if (child != NULL) {
