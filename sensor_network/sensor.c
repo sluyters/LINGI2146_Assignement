@@ -303,7 +303,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 				parent.addr = *from;		// Not sure
 				parent.n_hops = decoded_msg.payload.n_hops + 1;
 				// Send a DESTINATION_ADVERTISEMENT message to the new parent node
-				struct message *msg = (struct message *) malloc(sizeof(struct message));;
+				struct message *msg = (struct message *) malloc(sizeof(struct message));
 				msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
 				msg.header.version = version;
 				msg.header.type = DESTINATION_ADVERTISEMENT;
@@ -332,15 +332,25 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 		case DESTINATION_ADVERTISEMENT:
 			// Add to list of childs
 			add_child(from, decoded_msg.payload.source_id);
-			// TODO Forward message to parent
-			// TODO Put message in buffer
+			// Forward message to parent
+			packetbuf_copyfrom(msg, packetbuf_datalen());
 			runicast_send(&runicast, &(parent.addr_via), 1);
 			break;
 		case SENSOR_DATA:
 			// TODO Forward data message to root (+ aggregate)
 			break;
 		case SENSOR_CONTROL:
-			// TODO Forward control message to correct destination (how to know where to forward if not direct child ?)
+			// Check if message is destined to this sensor
+			if (my_id == decoded_msg.payload.destination_id) {
+				// TODO Adapt sensor settings
+			} else {
+				struct node* child = get_child(decoded_msg.payload.destination_id);
+				if (child != NULL) {
+					// Forward control message to child
+					packetbuf_copyfrom(msg, packetbuf_datalen());
+					runicast_send(&runicast, &(child.addr_via), 1);
+				}
+			}
 			break;
 		default:
 	}
