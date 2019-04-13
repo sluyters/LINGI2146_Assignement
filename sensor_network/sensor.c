@@ -85,12 +85,30 @@ AUTOSTART_PROCESSES(&broadcast_process);
 /*-----------------------------------------------------------------------------*/
 /* Helper functions */
 static void encode_message(struct message *decoded_msg, char *encoded_msg) {
-	// Allocate memory for encoded message
+	// TODO Allocate memory for encoded message (add a field in the header ?)
 	encoded_msg = (char *) malloc();
+	offset = 0;
 	// Encode the header
 	memcpy(encoded_msg, (void *) decoded_msg.header, sizeof(struct msg_header));
-	if (decoded_msg.payload != NULL) {
-		// TODO Encode the payload
+	offset += sizeof(struct msg_header);
+	// Encode the payload
+	switch (decoded_msg.header.msg_type) {
+		case DESTINATION_ADVERTISEMENT:
+			memcpy(encoded_msg + offset, (void *) decoded_msg.payload, sizeof(struct msg_dest_ad_payload));
+			break; 
+		case TREE_ADVERTISEMENT:
+			memcpy(encoded_msg + offset, (void *) decoded_msg.payload, sizeof(struct msg_tree_ad_payload));
+			break; 
+		case TREE_INFORMATION_REQUEST:
+			// Do nothing (no payload)
+			break;
+		case SENSOR_DATA:
+			// TODO Copy all payload data
+			break;
+		case SENSOR_CONTROL:
+			memcpy(encoded_msg + offset, (void *) decoded_msg.payload, sizeof(struct msg_control_payload));
+			break;
+		default:	
 	}
 }
 
@@ -158,7 +176,16 @@ static void free_message(struct message *msg) {
 	free(msg.header);
 	if (msg.payload != NULL) {
 		if (msg.header.msg_type == SENSOR_DATA) {
-			// TODO Free all aggregate data
+			// Free all aggregate data
+			struct msg_data_payload *current = msg.payload;
+			struct msg_data_payload *previous;
+			while (current != NULL) {
+				free(current->data);
+				free(current->data_header);
+				previous = current;
+				current = current.next;
+				free(previous);
+			}
 		} else {
 			free(msg.payload);
 		}
