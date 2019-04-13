@@ -40,6 +40,7 @@ struct msg_dest_ad_payload {
 }
 
 struct msg_tree_ad_payload {
+	uint8_t source_id;
 	uint8_t n_hops;
 }
 
@@ -70,12 +71,15 @@ struct message {
 /* Save parent + child nodes */
 struct node {
 	struct node *next;
-	rimeaddr_t addr;
+	rimeaddr_t addr_via;
+	uint8_t node_id;
 	uint8_t n_hops;
 }
 
-struct node *parent;
-struct node *childs;
+struct node *parent = NULL;
+struct node *childs = NULL;
+
+uint8_t my_id = 42; // TODO Modify this
 
 /*-----------------------------------------------------------------------------*/
 /* Declaration of the processes */
@@ -202,48 +206,114 @@ static void free_message(struct message *msg) {
 	free(msg);
 }
 
+static void add_child(rimeaddr_t *addr_via, uint8_t node_id) {
+	// Add the new child or update its data if already present
+	if (childs == NULL) {
+		childs = (node *) malloc(sizeof(struct node));
+		childs.addr_via = *addr_via;			// Not sure
+		childs.node_id = node_id;
+		childs.next = NULL;
+	} else {
+		struct node *current = childs;
+		struct node *previous;
+		while (current != NULL) {
+			if (current.node_id == node_id) {
+				// Update data
+				current.addr_via = *addr_via;	// Not sure
+				return;	
+			}
+			previous = current;
+			current = current.next;
+		}
+		// Add new child
+		struct node *new_child = (node *) malloc(sizeof(struct node));
+		new_child.addr_via = *addr_via;			// Not sure
+		new_child.node_id = node_id;
+		new_child.next = NULL;
+	}
+}
+
+static void remove_child(uint8_t node_id) {
+	if (childs != NULL && childs.node_id == node_id) {
+		// The child to delete is the first node
+		struct node *deleted_child = childs;
+		childs = childs.next;
+		free(deleted_child);
+	} else if (childs != NULL) {
+		struct node *current = childs.next;
+		struct node *previous = childs;
+		while (current != NULL) {
+			if (current.node_id == node_id) {
+				// Delete child
+				previous.next = current.next;
+				free(current);
+				return;	
+			}
+			previous = current;
+			current = current.next;
+		}
+	}
+}
+
+static node *get_child(uint8_t node_id) {
+	struct node *current = childs;
+	while (current != NULL) {
+		if (current.node_id == node_id) {
+			return current;
+		}
+		current = current.next;
+	}
+	return NULL;
+}
+
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a broadcast message is received */
 static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
 	char *msg = packetbuf_dataptr();
 	struct message *decoded_msg;
-	decode_message(struct message *decoded_msg, msg, packetbuf_datalen());
-
-	if (decoded_msg.header.msg_type == TREE_INFORMATION_REQUEST) {
-		if (parent != NULL) {
-			// TODO Send TREE_ADVERTISEMENT response
-			struct message *msg = (struct message *) malloc(sizeof(struct message));;
-			msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
-			msg.header.version = version;
-			msg.header.type = TREE_ADVERTISEMENT;
-			msg.length = sizeof(struct msg_header);
-			// TODO Add content to response
-			char *encoded_msg;
-			encode_message(msg, encoded_msg);
-			packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
-			runicast_send(&runicast, from, 1);
-		}
-	} else if (decoded_msg.header.msg_type == TREE_ADVERTISEMENT) {
-		if (parent == NULL) {
-			// TODO Check if the new parent is not a child + check if malloc OK
-			parent = (struct node *) malloc(sizeof(struct node));
-			parent.addr = *from;		// Not sure
-			parent.next = NULL;
-			parent.n_hops = 
-			// Send a DESTINATION_ADVERTISEMENT message to the new parent node
-			struct message *msg = (struct message *) malloc(sizeof(struct message));;
-			msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
-			msg.header.version = version;
-			msg.header.type = DESTINATION_ADVERTISEMENT;
-			char *encoded_msg;
-			encode_message(msg, encoded_msg);
-			packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
-			runicast_send(&runicast, from, 1);
-		} else {
-			// TODO Check if new neighbor is better than current parent	
+	decode_message(decoded_msg, msg, packetbuf_datalen());
 	
-		}
+	switch (decoded_msg.header.msg_type) {
+		case TREE_INFORMATION_REQUEST:
+			if (parent != NULL) {
+				// Send TREE_ADVERTISEMENT response
+				struct message *msg = (struct message *) malloc(sizeof(struct message));;
+				msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
+				msg.header.version = version;
+				msg.header.type = TREE_ADVERTISEMENT;
+				struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
+				payload.n_hops = parent.n_hops;
+				payload.source_id = my_id;
+				msg.payload = payload;
+				msg.length = sizeof(struct msg_header) + sizeof(struct msg_tree_ad_payload);
+				char *encoded_msg;
+				encode_message(msg, encoded_msg);
+				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
+				runicast_send(&runicast, from, 1);
+			}
+			break;
+		case TREE_ADVERTISEMENT:
+			// Check if new neighbor is better than current parent
+			if ((parent == NULL || decode_msg.payload.n_hops < parent.n_hops) && get_child(decoded_msg.payload.source_id) == NULL) {
+				if (parent == NULL) {
+					parent = (struct node *) malloc(sizeof(struct node));
+					parent.next = NULL;
+				}
+				parent.addr = *from;		// Not sure
+				parent.n_hops = decoded_msg.payload.n_hops + 1;
+				// Send a DESTINATION_ADVERTISEMENT message to the new parent node
+				struct message *msg = (struct message *) malloc(sizeof(struct message));;
+				msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
+				msg.header.version = version;
+				msg.header.type = DESTINATION_ADVERTISEMENT;
+				char *encoded_msg;
+				encode_message(msg, encoded_msg);
+				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
+				runicast_send(&runicast, from, 1);
+			}	
+			break;
+		default;
 	}
 }
 
@@ -258,13 +328,21 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 	struct message *decoded_msg;
 	decode_message(struct message *decoded_msg, msg, packetbuf_datalen());
 
-	if (decoded_msg.header.msg_type == DESTINATION_ADVERTISEMENT) {
-		// TODO Add to list of childs + 
-		// TODO Forward message to parent
-	} else if (decoded_msg.header.msg_type == SENSOR_DATA) {
-		// TODO Forward data message to root (+ aggregate)
-	} else if (decoded_msg.header.msg_type == SENSOR_CONTROL) {
-		// TODO Forward control message to correct destination (how to know where to forward if not direct child ?)
+	switch (decoded_msg.header.msg_type) {
+		case DESTINATION_ADVERTISEMENT:
+			// Add to list of childs
+			add_child(from, decoded_msg.payload.source_id);
+			// TODO Forward message to parent
+			// TODO Put message in buffer
+			runicast_send(&runicast, &(parent.addr_via), 1);
+			break;
+		case SENSOR_DATA:
+			// TODO Forward data message to root (+ aggregate)
+			break;
+		case SENSOR_CONTROL:
+			// TODO Forward control message to correct destination (how to know where to forward if not direct child ?)
+			break;
+		default:
 	}
 }
 
