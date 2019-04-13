@@ -61,6 +61,7 @@ struct msg_control_payload {
 }
 
 struct message {
+	uint32_t length;
 	struct msg_header *header;
 	void *payload;
 }
@@ -85,8 +86,8 @@ AUTOSTART_PROCESSES(&broadcast_process);
 /*-----------------------------------------------------------------------------*/
 /* Helper functions */
 static void encode_message(struct message *decoded_msg, char *encoded_msg) {
-	// TODO Allocate memory for encoded message (add a field in the header ?)
-	encoded_msg = (char *) malloc();
+	// Allocate memory for encoded message
+	encoded_msg = (char *) malloc(decoded_msg.length);
 	offset = 0;
 	// Encode the header
 	memcpy(encoded_msg, (void *) decoded_msg.header, sizeof(struct msg_header));
@@ -103,7 +104,15 @@ static void encode_message(struct message *decoded_msg, char *encoded_msg) {
 			// Do nothing (no payload)
 			break;
 		case SENSOR_DATA:
-			// TODO Copy all payload data
+			// Copy all payload data
+			struct msg_data_payload *current = decoded_msg.payload;
+			while (current != NULL) {
+				memcpy(encoded_msg + offset, (void *) current.data_header, sizeof(struct msg_data_payload_h));
+				offset += sizeof(struct msg_data_payload_h);
+				memcpy(encoded_msg + offset, (void *) current.data, current.data_header.length);
+				offset += current.data_header.length;
+				current = current.next;
+			}
 			break;
 		case SENSOR_CONTROL:
 			memcpy(encoded_msg + offset, (void *) decoded_msg.payload, sizeof(struct msg_control_payload));
@@ -112,10 +121,11 @@ static void encode_message(struct message *decoded_msg, char *encoded_msg) {
 	}
 }
 
-static void decode_message(struct message *decoded_msg, char *encoded_msg) {
+static void decode_message(struct message *decoded_msg, char *encoded_msg, uint16_t msg_len) {
 	int offset = 0;
 	// Allocate memory for decoded message
 	decoded_msg = (struct message *) malloc(sizeof(struct message));
+	decoded_msg.length = msg_len;
 	decoded_msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
 	// Decode the header
 	memcpy(decoded_msg.header, (void *) encoded_msg, sizeof(struct msg_header));
@@ -147,8 +157,7 @@ static void decode_message(struct message *decoded_msg, char *encoded_msg) {
 			offset += payload.data_header.length;
 			decoded_msg.payload = payload;
 
-			uint16_t data_len = packetbuf_datalen();
-			while (offset < data_len) {
+			while (offset < msg_len) {
 				// Set next data payload
 				payload.next = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
 				payload = payload.next;
@@ -199,7 +208,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
 	char *msg = packetbuf_dataptr();
 	struct message *decoded_msg;
-	decode_message(struct message *decoded_msg, msg);
+	decode_message(struct message *decoded_msg, msg, packetbuf_datalen());
 
 	if (decoded_msg.header.msg_type == TREE_INFORMATION_REQUEST) {
 		if (parent != NULL) {
@@ -208,6 +217,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
 			msg.header.version = version;
 			msg.header.type = TREE_ADVERTISEMENT;
+			msg.length = sizeof(struct msg_header);
 			// TODO Add content to response
 			char *encoded_msg;
 			encode_message(msg, encoded_msg);
@@ -246,7 +256,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
 	char *msg = packetbuf_dataptr();
 	struct message *decoded_msg;
-	decode_message(struct message *decoded_msg, msg);
+	decode_message(struct message *decoded_msg, msg, packetbuf_datalen());
 
 	if (decoded_msg.header.msg_type == DESTINATION_ADVERTISEMENT) {
 		// TODO Add to list of childs + 
