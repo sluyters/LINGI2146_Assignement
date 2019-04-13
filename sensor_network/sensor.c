@@ -25,7 +25,9 @@ struct broadcast_conn broadcast;
 enum {
 	DESTINATION_ADVERTISEMENT, 
 	TREE_ADVERTISEMENT, 
-	TREE_INFORMATION_REQUEST
+	TREE_INFORMATION_REQUEST,
+	SENSOR_DATA,
+	SENSOR_CONTROL
 };
 
 struct msg_header {
@@ -33,8 +35,34 @@ struct msg_header {
 	uint8_t msg_type;
 }
 
+struct msg_dest_ad_payload {
+	uint8_t source_id;
+}
+
+struct msg_tree_ad_payload {
+	uint8_t n_hops;
+}
+
+struct msg_data_payload_h {
+	uint8_t source_id;
+	uint8_t topic_id;
+	uint8_t length;
+}
+
+struct msg_data_payload {
+	struct msg_data_payload_h *data_header;
+	void *data;
+	struct msg_data_payload *next;
+}
+
+struct msg_control_payload {
+	uint8_t destination_id;
+	uint8_t command;
+}
+
 struct message {
 	struct msg_header *header;
+	void *payload;
 }
 
 /*-----------------------------------------------------------------------------*/
@@ -61,20 +89,80 @@ static void encode_message(struct message *decoded_msg, char *encoded_msg) {
 	encoded_msg = (char *) malloc();
 	// Encode the header
 	memcpy(encoded_msg, (void *) decoded_msg.header, sizeof(struct msg_header));
-	// TODO Encode the payload (if any)
+	if (decoded_msg.payload != NULL) {
+		// TODO Encode the payload
+	}
 }
 
 static void decode_message(struct message *decoded_msg, char *encoded_msg) {
+	int offset = 0;
 	// Allocate memory for decoded message
 	decoded_msg = (struct message *) malloc(sizeof(struct message));
 	decoded_msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
 	// Decode the header
 	memcpy(decoded_msg.header, (void *) encoded_msg, sizeof(struct msg_header));
+	offset += sizeof(struct msg_header);
+	// Decode the payload
+	switch (decoded_msg.header.msg_type) {
+		case DESTINATION_ADVERTISEMENT:
+			struct msg_dest_ad_payload *payload = (struct msg_dest_ad_payload *) malloc(sizeof(struct msg_dest_ad_payload));
+			memcpy(payload, (void *) encoded_msg + offset, sizeof(struct msg_dest_ad_payload));
+			decoded_msg.payload = payload;
+			break; 
+		case TREE_ADVERTISEMENT:
+			struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
+			memcpy(payload, (void *) encoded_msg + offset, sizeof(struct msg_tree_ad_payload));
+			decoded_msg.payload = payload;
+			break; 
+		case TREE_INFORMATION_REQUEST:
+			decoded_msg.payload = NULL;
+			break;
+		case SENSOR_DATA:
+			struct msg_data_payload *payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+			// Copy data header
+			payload.data_header = (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
+			memcpy(payload.data_header, (void *) encoded_msg + offset, sizeof(struct msg_data_payload_h));
+			offset += sizeof(struct msg_data_payload_h);
+			// Copy data payload
+			payload.data = (void *) malloc(payload.data_header.length);
+			memcpy(payload.data, (void *) encoded_msg + offset, payload.data_header.length));
+			offset += payload.data_header.length;
+			decoded_msg.payload = payload;
+
+			uint16_t data_len = packetbuf_datalen();
+			while (offset < data_len) {
+				// Set next data payload
+				payload.next = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+				payload = payload.next;
+				// Copy data header
+				payload.data_header = (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
+				memcpy(payload.data_header, (void *) encoded_msg + offset, sizeof(struct msg_data_payload_h));
+				offset += sizeof(struct msg_data_payload_h);
+				// Copy data payload
+				payload.data = (void *) malloc(payload.data_header.length);
+				memcpy(payload.data, (void *) encoded_msg + offset, payload.data_header.length));
+				offset += payload.data_header.length;
+			}
+			payload.next = NULL;
+			break;
+		case SENSOR_CONTROL:
+			struct msg_control_payload *payload = (struct msg_control_payload *) malloc(sizeof(struct msg_control_payload));
+			memcpy(payload, (void *) encoded_msg + offset, sizeof(struct msg_control_payload));
+			decoded_msg.payload = payload;
+			break;
+		default:	
+	}
 }
 
 static void free_message(struct message *msg) {
 	free(msg.header);
-	// TODO Free Payload (if any)
+	if (msg.payload != NULL) {
+		if (msg.header.msg_type == SENSOR_DATA) {
+			// TODO Free all aggregate data
+		} else {
+			free(msg.payload);
+		}
+	}
 	free(msg);
 }
 
@@ -134,10 +222,11 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 	decode_message(struct message *decoded_msg, msg);
 
 	if (decoded_msg.header.msg_type == DESTINATION_ADVERTISEMENT) {
-		// TODO Add to list of childs + forward message to parent
-	} else if (decoded_msg.header.msg_type == ) {
+		// TODO Add to list of childs + 
+		// TODO Forward message to parent
+	} else if (decoded_msg.header.msg_type == SENSOR_DATA) {
 		// TODO Forward data message to root (+ aggregate)
-	} else if (decoded_msg.header.msg_type == ) {
+	} else if (decoded_msg.header.msg_type == SENSOR_CONTROL) {
 		// TODO Forward control message to correct destination (how to know where to forward if not direct child ?)
 	}
 }
