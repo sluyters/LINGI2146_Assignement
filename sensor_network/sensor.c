@@ -26,6 +26,7 @@ enum {
 	DESTINATION_ADVERTISEMENT, 
 	TREE_ADVERTISEMENT, 
 	TREE_INFORMATION_REQUEST,
+	TREE_BREAKDOWN,
 	SENSOR_DATA,
 	SENSOR_CONTROL
 };
@@ -43,6 +44,10 @@ struct msg_dest_ad_payload {
 struct msg_tree_ad_payload {
 	uint8_t source_id;
 	uint8_t n_hops;
+}
+
+struct msg_tree_breakdown_payload {
+	uint8_t source_id;
 }
 
 struct msg_data_payload_h {
@@ -93,6 +98,7 @@ AUTOSTART_PROCESSES(&broadcast_process);
 
 /*-----------------------------------------------------------------------------*/
 /* Helper functions */
+// TODO SAMER JE ME SUIS PLANTE PARTOUT, FAUT QUE CA RENVOIE LA LONGUEUR DU MSG ENCODE PARCE QU'APRES J'UTILISE SIZEOF(encode_msg) MAIS C'est mauvais
 static void encode_message(struct message *decoded_msg, char *encoded_msg) {
 	// Allocate memory for encoded message
 	encoded_msg = (char *) malloc(decoded_msg.header.length + sizeof(struct msg_header); // TODO make allocation outside of the function ?
@@ -108,6 +114,9 @@ static void encode_message(struct message *decoded_msg, char *encoded_msg) {
 		case TREE_ADVERTISEMENT:
 			memcpy(encoded_msg + offset, (void *) decoded_msg.payload, sizeof(struct msg_tree_ad_payload));
 			break; 
+		case TREE_BREAKDOWN:
+			memcpy(encoded_msg + offset, (void *) decoded_msg.payload, sizeof(struct msg_tree_breakdown_payload));
+			break;
 		case TREE_INFORMATION_REQUEST:
 			// Do nothing (no payload)
 			break;
@@ -147,6 +156,11 @@ static void decode_message(struct message *decoded_msg, char *encoded_msg, uint1
 		case TREE_ADVERTISEMENT:
 			struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
 			memcpy(payload, (void *) encoded_msg + offset, sizeof(struct msg_tree_ad_payload));
+			decoded_msg.payload = payload;
+			break; 
+		case TREE_BREAKDOWN:
+			struct msg_tree_ad_payload *payload = (struct msg_tree_breakdown_payload *) malloc(sizeof(struct msg_tree_breakdown_payload));
+			memcpy(payload, (void *) encoded_msg + offset, sizeof(struct msg_tree_breakdown_payload));
 			decoded_msg.payload = payload;
 			break; 
 		case TREE_INFORMATION_REQUEST:
@@ -269,15 +283,37 @@ static node *get_child(uint8_t node_id) {
 	return NULL;
 }
 
-static void get_tree_advertisement_msg(struct message *msg) {
+static void send_to_childs(void *msg, int length) {
+	struct node *current = childs;
+	while (current != NULL) {
+		packetbuf_copyfrom(encoded_msg, length);	// Put data inside the packet
+		runicast_send(&runicast, &(current.addr_via), 1); 
+	}
+}
+
+static void get_msg(struct message *msg, int msg_type) {
 	msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
 	msg.header.version = version;
-	msg.header.type = TREE_ADVERTISEMENT;
-	struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
-	payload.n_hops = parent.n_hops;
-	payload.source_id = my_id;
-	msg.payload = payload;
-	msg.header.length = sizeof(struct msg_tree_ad_payload);
+	msg.header.type = msg_type;
+	switch (msg_type) {
+		case TREE_ADVERTISEMENT:
+			msg.payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
+			msg.payload.n_hops = parent.n_hops;
+			msg.payload.source_id = my_id;
+			msg.header.length = sizeof(struct msg_tree_ad_payload);
+			break;
+		case DESTINATION_ADVERTISEMENT:
+			msg.payload = (struct msg_dest_ad_payload *) malloc(sizeof(struct msg_dest_ad_payload));
+			msg.payload.source_id = my_id;
+			msg.header.length = sizeof(struct msg_dest_ad_payload);
+			break;
+		case TREE_BREAKDOWN:
+			msg.payload = (struct msg_tree_breakdown_payload *) malloc(sizeof(struct msg_tree_breakdown_payload));
+			msg.payload.source_id = my_id;
+			msg.header.length = sizeof(struct msg_tree_breakdown_payload);
+			break;
+		default:
+	}
 }
 
 /*-----------------------------------------------------------------------------*/
@@ -293,13 +329,12 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			if (parent != NULL) {
 				// Send TREE_ADVERTISEMENT response
 				struct message msg;
-				get_tree_advertisement_msg(&msg);
+				get_msg(&msg, TREE_ADVERTISEMENT);
 				char *encoded_msg;
 				encode_message(&msg, encoded_msg);
 				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
 				runicast_send(&runicast, from, 1);
 			}
-			// TODO send a message to indicate that no tree exists ? -> new message kind
 			break;
 		case TREE_ADVERTISEMENT:
 			// Check if new neighbor is better than current parent
@@ -311,17 +346,15 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 				parent.addr = *from;		// Not sure
 				parent.n_hops = decoded_msg.payload.n_hops + 1;
 				// Send a DESTINATION_ADVERTISEMENT message to the new parent node
-				struct message *msg = (struct message *) malloc(sizeof(struct message));
-				msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
-				msg.header.version = version;
-				msg.header.type = DESTINATION_ADVERTISEMENT;
+				struct message msg;
+				get_msg(&msg, DESTINATION_ADVERTISEMENT);
 				char *encoded_msg;
 				encode_message(msg, encoded_msg);
 				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
 				runicast_send(&runicast, from, 1);
 				// Broadcast the new tree
 				struct message msg;
-				get_tree_advertisement_msg(&msg);
+				get_msg(&msg, TREE_ADVERTISEMENT);
 				char *encoded_msg;
 				encode_message(&msg, encoded_msg);
 				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet				
@@ -331,7 +364,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 				parent.n_hops = decoded_msg.payload.n_hops + 1;
 				// Broadcast the new tree
 				struct message msg;
-				get_tree_advertisement_msg(&msg);
+				get_msg(&msg, TREE_ADVERTISEMENT);
 				char *encoded_msg;
 				encode_message(&msg, encoded_msg);
 				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet				
@@ -349,11 +382,23 @@ static const struct broadcast_callbacks bc = {broadcast_recv};
 /* Callback function when a unicast message is received */
 static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
-	char *msg = packetbuf_dataptr();
+	char *encoded_msg = packetbuf_dataptr();
 	struct message *decoded_msg;
-	decode_message(struct message *decoded_msg, msg, packetbuf_datalen());
+	decode_message(struct message *decoded_msg, encoded_msg, packetbuf_datalen());
 
 	switch (decoded_msg.header.msg_type) {
+		case TREE_BREAKDOWN:
+			if (parent != NULL && decoded_msg.payload.source_id == parent.node_id) {
+				free(parent);	// TODO modify ?
+				parent = NULL;	
+				// Send a TREE_BREAKDOWN message to each child
+				struct message msg;
+				get_msg(&msg, TREE_BREAKDOWN);
+				char *encoded_msg;
+				encode_message(msg, encoded_msg);
+				send_to_childs(encoded_msg, sizeof(encoded_msg));
+				// TODO not here ? delete childs after a certain amount of time if no destination advertisement received ? 
+			}
 		case DESTINATION_ADVERTISEMENT:
 			// Add to list of childs
 			add_child(from, decoded_msg.payload.source_id);
