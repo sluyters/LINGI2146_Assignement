@@ -292,6 +292,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
 				runicast_send(&runicast, from, 1);
 			}
+			// TODO send a message to indicate that no tree exists ? 
 			break;
 		case TREE_ADVERTISEMENT:
 			// Check if new neighbor is better than current parent
@@ -311,6 +312,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 				encode_message(msg, encoded_msg);
 				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
 				runicast_send(&runicast, from, 1);
+				// TODO Broadcast the new tree (allows childs to update + new nodes to join the tree)
 			}	
 			break;
 		default;
@@ -337,7 +339,10 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 			runicast_send(&runicast, &(parent.addr_via), 1);
 			break;
 		case SENSOR_DATA:
-			// TODO Forward data message to root (+ aggregate)
+			// TODO Aggregate mesages (buffer + max_timer ?)
+			// Forward message to parent (temporary simple solution)
+			packetbuf_copyfrom(msg, packetbuf_datalen());
+			runicast_send(&runicast, &(parent.addr_via), 1);
 			break;
 		case SENSOR_CONTROL:
 			// Check if message is destined to this sensor
@@ -368,3 +373,8 @@ PROCESS_THREAD(broadcast_process, ev, data)
 {
 	// TODO
 }
+
+// TODO Process that generates sensor data, sends it to the root if it attached to a tree, broadcasts a TREE_INFORMATION_REQUEST (every 30 secs?) otherwise.
+// TODO Regularly broadcast TREE_ADVERTISEMENT messages ?
+// TODO How to check if the parent node is still up ? -> TREE_BREAKDOWN_NOTIF sent from parent when a SENSOR_DATA message is received ? -> add tree version ?
+ 
