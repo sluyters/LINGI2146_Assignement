@@ -95,7 +95,7 @@ AUTOSTART_PROCESSES(&broadcast_process);
 /* Helper functions */
 static void encode_message(struct message *decoded_msg, char *encoded_msg) {
 	// Allocate memory for encoded message
-	encoded_msg = (char *) malloc(decoded_msg.header.length + sizeof(struct msg_header);
+	encoded_msg = (char *) malloc(decoded_msg.header.length + sizeof(struct msg_header); // TODO make allocation outside of the function ?
 	offset = 0;
 	// Encode the header
 	memcpy(encoded_msg, (void *) decoded_msg.header, sizeof(struct msg_header));
@@ -132,7 +132,7 @@ static void encode_message(struct message *decoded_msg, char *encoded_msg) {
 static void decode_message(struct message *decoded_msg, char *encoded_msg, uint16_t msg_len) {
 	int offset = 0;
 	// Allocate memory for decoded message
-	decoded_msg = (struct message *) malloc(sizeof(struct message));
+	decoded_msg = (struct message *) malloc(sizeof(struct message));	// TODO make allocation outside of the function
 	decoded_msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
 	// Decode the header
 	memcpy(decoded_msg.header, (void *) encoded_msg, sizeof(struct msg_header));
@@ -269,29 +269,33 @@ static node *get_child(uint8_t node_id) {
 	return NULL;
 }
 
+static void get_tree_advertisement_msg(struct message *msg) {
+	msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
+	msg.header.version = version;
+	msg.header.type = TREE_ADVERTISEMENT;
+	struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
+	payload.n_hops = parent.n_hops;
+	payload.source_id = my_id;
+	msg.payload = payload;
+	msg.header.length = sizeof(struct msg_tree_ad_payload);
+}
+
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a broadcast message is received */
 static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
-	char *msg = packetbuf_dataptr();
+	char *encoded_msg = packetbuf_dataptr();
 	struct message *decoded_msg;
-	decode_message(decoded_msg, msg, packetbuf_datalen());
+	decode_message(decoded_msg, encoded_msg, packetbuf_datalen());
 	
 	switch (decoded_msg.header.msg_type) {
 		case TREE_INFORMATION_REQUEST:
 			if (parent != NULL) {
 				// Send TREE_ADVERTISEMENT response
-				struct message *msg = (struct message *) malloc(sizeof(struct message));;
-				msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
-				msg.header.version = version;
-				msg.header.type = TREE_ADVERTISEMENT;
-				struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
-				payload.n_hops = parent.n_hops;
-				payload.source_id = my_id;
-				msg.payload = payload;
-				msg.header.length = sizeof(struct msg_tree_ad_payload);
+				struct message msg;
+				get_tree_advertisement_msg(&msg);
 				char *encoded_msg;
-				encode_message(msg, encoded_msg);
+				encode_message(&msg, encoded_msg);
 				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
 				runicast_send(&runicast, from, 1);
 			}
@@ -315,8 +319,24 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 				encode_message(msg, encoded_msg);
 				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
 				runicast_send(&runicast, from, 1);
-				// TODO Broadcast the new tree (allows childs to update + new nodes to join the tree)
-			}	
+				// Broadcast the new tree
+				struct message msg;
+				get_tree_advertisement_msg(&msg);
+				char *encoded_msg;
+				encode_message(&msg, encoded_msg);
+				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet				
+				broadcast_send(&broadcast);
+			} else if (parent.node_id == decoded_msg.payload.source_id)	{
+				// Update the informations of the parent
+				parent.n_hops = decoded_msg.payload.n_hops + 1;
+				// Broadcast the new tree
+				struct message msg;
+				get_tree_advertisement_msg(&msg);
+				char *encoded_msg;
+				encode_message(&msg, encoded_msg);
+				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet				
+				broadcast_send(&broadcast);
+			}
 			break;
 		default;
 	}
@@ -340,29 +360,29 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 			// Forward message to parent
 			packetbuf_copyfrom(msg, packetbuf_datalen());
 			runicast_send(&runicast, &(parent.addr_via), 1);
-			free_message(message);
+			free_message(decoded_msg);
 			break;
 		case SENSOR_DATA:
 			if (data_aggregate_msg == NULL) {
 				// Store this message while waiting for other messages to aggregate (TODO Add timer ?)
-				data_aggregate_msg = message;
+				data_aggregate_msg = decoded_msg;
 			} else {
 				// If too many messages already aggregated, send old messages + save this one as new aggregated message
-				if (data_aggregate_msg.header.length + message.header.length > 128) {
+				if (data_aggregate_msg.header.length + decoded_msg.header.length > 128) {
 					char *encoded_msg;
 					encode_message(data_aggregate_msg, encoded_msg);
 					packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
 					free_message(data_aggregate_msg);
-					data_aggregate_msg = message;
+					data_aggregate_msg = decoded_msg;
 				} else {
 					// Add to aggregated message payload
 					struct msg_data_payload *current = data_aggregate_msg.payload;
 					while (current.next != NULL) {
 						current = current.next
 					}
-					current.next = message.payload;
-					message.payload = NULL; // Avoid conflits when freeing the message
-					free_message(message);
+					current.next = decoded_msg.payload;
+					decoded_msg.payload = NULL; // Avoid conflits when freeing the message
+					free_message(decoded_msg);
 				}
 			}
 			// Forward message to parent (temporary simple solution)
