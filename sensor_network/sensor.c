@@ -98,10 +98,10 @@ AUTOSTART_PROCESSES(&broadcast_process);
 
 /*-----------------------------------------------------------------------------*/
 /* Helper functions */
-// TODO SAMER JE ME SUIS PLANTE PARTOUT, FAUT QUE CA RENVOIE LA LONGUEUR DU MSG ENCODE PARCE QU'APRES J'UTILISE SIZEOF(encode_msg) MAIS C'est mauvais
-static void encode_message(struct message *decoded_msg, char *encoded_msg) {
+static uint32_t encode_message(struct message *decoded_msg, char *encoded_msg) {
+	uint32_t length = decoded_msg.header.length + sizeof(struct msg_header);
 	// Allocate memory for encoded message
-	encoded_msg = (char *) malloc(decoded_msg.header.length + sizeof(struct msg_header); // TODO make allocation outside of the function ?
+	encoded_msg = (char *) malloc(length); // TODO make allocation outside of the function ?
 	offset = 0;
 	// Encode the header
 	memcpy(encoded_msg, (void *) decoded_msg.header, sizeof(struct msg_header));
@@ -136,6 +136,7 @@ static void encode_message(struct message *decoded_msg, char *encoded_msg) {
 			break;
 		default:	
 	}
+	return length;
 }
 
 static void decode_message(struct message *decoded_msg, char *encoded_msg, uint16_t msg_len) {
@@ -331,8 +332,8 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 				struct message msg;
 				get_msg(&msg, TREE_ADVERTISEMENT);
 				char *encoded_msg;
-				encode_message(&msg, encoded_msg);
-				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
+				uint32_t len = encode_message(&msg, encoded_msg);
+				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 				runicast_send(&runicast, from, 1);
 			}
 			break;
@@ -349,15 +350,15 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 				struct message msg;
 				get_msg(&msg, DESTINATION_ADVERTISEMENT);
 				char *encoded_msg;
-				encode_message(msg, encoded_msg);
-				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
+				uint32_t len = encode_message(msg, encoded_msg);
+				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 				runicast_send(&runicast, from, 1);
 				// Broadcast the new tree
 				struct message msg;
 				get_msg(&msg, TREE_ADVERTISEMENT);
 				char *encoded_msg;
-				encode_message(&msg, encoded_msg);
-				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet				
+				uint32_t len = encode_message(&msg, encoded_msg);
+				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
 				broadcast_send(&broadcast);
 			} else if (parent.node_id == decoded_msg.payload.source_id)	{
 				// Update the informations of the parent
@@ -366,8 +367,8 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 				struct message msg;
 				get_msg(&msg, TREE_ADVERTISEMENT);
 				char *encoded_msg;
-				encode_message(&msg, encoded_msg);
-				packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet				
+				uint32_t len = encode_message(&msg, encoded_msg);
+				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
 				broadcast_send(&broadcast);
 			}
 			break;
@@ -395,8 +396,8 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 				struct message msg;
 				get_msg(&msg, TREE_BREAKDOWN);
 				char *encoded_msg;
-				encode_message(msg, encoded_msg);
-				send_to_childs(encoded_msg, sizeof(encoded_msg));
+				uint32_t len = encode_message(msg, encoded_msg);
+				send_to_childs(encoded_msg, len);
 				// TODO not here ? delete childs after a certain amount of time if no destination advertisement received ? 
 			}
 		case DESTINATION_ADVERTISEMENT:
@@ -415,8 +416,8 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 				// If too many messages already aggregated, send old messages + save this one as new aggregated message
 				if (data_aggregate_msg.header.length + decoded_msg.header.length > 128) {
 					char *encoded_msg;
-					encode_message(data_aggregate_msg, encoded_msg);
-					packetbuf_copyfrom(encoded_msg, sizeof(encoded_msg));	// Put data inside the packet
+					uint32_t len = encode_message(data_aggregate_msg, encoded_msg);
+					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 					free_message(data_aggregate_msg);
 					data_aggregate_msg = decoded_msg;
 				} else {
