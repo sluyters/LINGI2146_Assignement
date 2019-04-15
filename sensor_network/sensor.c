@@ -313,6 +313,10 @@ static void get_msg(struct message *msg, int msg_type) {
 			msg.payload.source_id = my_id;
 			msg.header.length = sizeof(struct msg_tree_breakdown_payload);
 			break;
+		case TREE_INFORMATION_REQUEST:
+			msg.payload = NULL;
+			msg.header.length = 0;
+			break;
 		default:
 	}
 }
@@ -460,13 +464,23 @@ static const struct runicast_callbacks rc = {runicast_recv}
 
 /*-----------------------------------------------------------------------------*/
 /* Process */
+// TODO 1 process for tree building, 1 for sensor data ? or only 1 process ?
 // Broadcast process
 PROCESS_THREAD(broadcast_process, ev, data)
 {
 	static struct etimer et;
 	// TODO
 	while (1) {
-	
+		// TODO more specific condition (increase time between broadcasts if no tree ?
+		if (parent == NULL) {
+			// Broadcast a TREE_INFORMATION_REQUEST
+			struct message msg;
+			get_msg(&msg, TREE_INFORMATION_REQUEST);
+			char *encoded_msg;
+			uint32_t len = encode_message(&msg, encoded_msg);
+			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
+			broadcast_send(&broadcast);
+		} 
 	}
 }
 
