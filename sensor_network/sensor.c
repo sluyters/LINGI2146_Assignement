@@ -359,7 +359,8 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			// Check version, if version >= local version, process the TREE_ADVERTISEMENT message
 			if (decoded_msg.payload.tree_version >= tree_version) {
 				// Check if new neighbor is better than current parent (automatically better if tree version is greater)
-				if (decoded_msg.payload.tree_version > tree_version || ((parent == NULL || decode_msg.payload.n_hops < parent.n_hops) && get_child(decoded_msg.payload.source_id) == NULL)) {
+				// TODO Handle tree_version overflow
+				if (decoded_msg.payload.tree_version > tree_version || ((parent == NULL || decode_msg.payload.n_hops < parent.n_hops) && decoded_msg.payload.tree_version == tree_version && get_child(decoded_msg.payload.source_id) == NULL)) {
 					if (parent == NULL) {
 						parent = (struct node *) malloc(sizeof(struct node));
 						parent.next = NULL;
