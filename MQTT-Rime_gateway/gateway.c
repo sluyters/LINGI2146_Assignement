@@ -1,5 +1,13 @@
+#include "contiki.h"
+#include "contiki-lib.h"
+#include "contiki-net.h"
 
+#include <time.h>
+#include <string.h>
 
+#include "message.h"
+
+#include "net/rime/rime.h"
 
 uint8_t my_id = 0; // TODO Modify this
 uint8_t tree_version = 0; 
