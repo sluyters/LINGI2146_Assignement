@@ -335,9 +335,8 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	switch (decoded_msg.header.msg_type) {
 		case TREE_INFORMATION_REQUEST:
 			// If the tree needs rebuilding
-			if (decoded_msg.payload.request_attributes & 0x1 == 0x1) {
-				// TODO what happens if 2 rebuilding requests are received, one with same version and one with higher version. Will the most recent request still be received by the root ?
-				if (tree_stable && decoded_msg.payload.tree_version >= tree_version) {
+			if ((decoded_msg.payload.request_attributes & 0x1) == 0x1) {
+				if (decoded_msg.payload.tree_version > tree_version || (tree_stable && decoded_msg.payload.tree_version == tree_version)) {
 					tree_stable = 0;
 					// Broadcast TREE_INFORMATION_REQUEST message to destroy the tree
 					packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
@@ -360,7 +359,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			if (decoded_msg.payload.tree_version >= tree_version) {
 				// Check if new neighbor is better than current parent (automatically better if tree version is greater)
 				// TODO Handle tree_version overflow
-				if (decoded_msg.payload.tree_version > tree_version || ((parent == NULL || decode_msg.payload.n_hops < parent.n_hops) && decoded_msg.payload.tree_version == tree_version && get_child(decoded_msg.payload.source_id) == NULL)) {
+				if (decoded_msg.payload.tree_version > tree_version || ((parent == NULL || decode_msg.payload.n_hops < parent.n_hops) && get_child(decoded_msg.payload.source_id) == NULL)) {
 					if (parent == NULL) {
 						parent = (struct node *) malloc(sizeof(struct node));
 						parent.next = NULL;
@@ -434,6 +433,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 					char *encoded_msg;
 					uint32_t len = encode_message(data_aggregate_msg, encoded_msg);
 					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
+					runicast_send(&runicast, &(parent.addr_via), 1);
 					free_message(data_aggregate_msg);
 					data_aggregate_msg = decoded_msg;
 				} else {
@@ -447,9 +447,6 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 					free_message(decoded_msg);
 				}
 			}
-			// Forward message to parent (temporary simple solution)
-			packetbuf_copyfrom(msg, packetbuf_datalen());
-			runicast_send(&runicast, &(parent.addr_via), 1);
 			break;
 		case SENSOR_CONTROL:
 			// Check if message is destined to this sensor
