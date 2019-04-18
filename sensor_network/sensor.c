@@ -156,6 +156,53 @@ static void get_msg(struct message *msg, int msg_type) {
 	}
 }
 
+static void handle_tree_advertisement_msg(struct message *msg) {
+	// Check version, if version >= local version, process the TREE_ADVERTISEMENT message
+	if (msg.payload.tree_version >= tree_version) {
+		// Check if new neighbor is better than current parent (automatically better if tree version is greater)
+		if ((msg.payload.tree_version > tree_version || tree_version - msg.payload.tree_version > 245) || ((parent == NULL || msg.payload.n_hops < parent.n_hops) && get_child(msg.payload.source_id) == NULL)) {
+			if (parent == NULL) {
+				parent = (struct node *) malloc(sizeof(struct node));
+				parent.next = NULL;
+			}
+			parent.addr = *from;		// Not sure
+			parent.n_hops = msg.payload.n_hops + 1;
+			// Send a DESTINATION_ADVERTISEMENT message to the new parent node
+			struct message *dest_msg = (struct message *) malloc(sizeof(struct message));	
+			get_msg(dest_msg, DESTINATION_ADVERTISEMENT);
+			char *encoded_msg;
+			uint32_t len = encode_message(dest_msg, encoded_msg);
+			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
+			runicast_send(&runicast, from, 1);
+			free(encoded_msg);
+			free_message(dest_msg);
+			// Broadcast the new tree
+			struct message *ad_msg = (struct message *) malloc(sizeof(struct message));	
+			get_msg(ad_msg, TREE_ADVERTISEMENT);
+			uint32_t len = encode_message(ad_msg, encoded_msg);
+			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
+			broadcast_send(&broadcast);
+			free(encoded_msg);
+			free_message(ad_msg);
+		} else if (parent.node_id == msg.payload.source_id)	{
+			// Update the informations of the parent
+			parent.n_hops = msg.payload.n_hops + 1;
+			// Broadcast the new tree
+			struct message *ad_msg = (struct message *) malloc(sizeof(struct message));	
+			get_msg(&ad_msg, TREE_ADVERTISEMENT);
+			char *encoded_msg;
+			uint32_t len = encode_message(&ad_msg, encoded_msg);
+			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
+			broadcast_send(&broadcast);
+			free(encoded_msg);
+			free_message(ad_msg);
+		}
+		// Update tree version + consider the tree as stable
+		tree_version = msg.payload.tree_version;
+		tree_stable = 1;
+	}
+}
+
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a broadcast message is received */
 static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
@@ -177,56 +224,20 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			} else {
 				if (parent != NULL && decoded_msg.payload.tree_version <= tree_version) {
 					// Send TREE_ADVERTISEMENT response
-					struct message msg;
-					get_msg(&msg, TREE_ADVERTISEMENT);
+					struct message *msg = (struct message *) malloc(sizeof(struct message));
+					get_msg(msg, TREE_ADVERTISEMENT);
 					char *encoded_msg;
-					uint32_t len = encode_message(&msg, encoded_msg);
+					uint32_t len = encode_message(msg, encoded_msg);
 					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 					runicast_send(&runicast, from, 1);	
+					free(encoded_msg);
+					free_message(msg);
 				}
 			}
 			break;
 		case TREE_ADVERTISEMENT:
-			// Check version, if version >= local version, process the TREE_ADVERTISEMENT message
-			if (decoded_msg.payload.tree_version >= tree_version) {
-				// Check if new neighbor is better than current parent (automatically better if tree version is greater)
-				// TODO Handle tree_version overflow
-				if (decoded_msg.payload.tree_version > tree_version || ((parent == NULL || decode_msg.payload.n_hops < parent.n_hops) && get_child(decoded_msg.payload.source_id) == NULL)) {
-					if (parent == NULL) {
-						parent = (struct node *) malloc(sizeof(struct node));
-						parent.next = NULL;
-					}
-					parent.addr = *from;		// Not sure
-					parent.n_hops = decoded_msg.payload.n_hops + 1;
-					// Send a DESTINATION_ADVERTISEMENT message to the new parent node
-					struct message msg;
-					get_msg(&msg, DESTINATION_ADVERTISEMENT);
-					char *encoded_msg;
-					uint32_t len = encode_message(msg, encoded_msg);
-					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-					runicast_send(&runicast, from, 1);
-					// Broadcast the new tree
-					struct message msg;
-					get_msg(&msg, TREE_ADVERTISEMENT);
-					char *encoded_msg;
-					uint32_t len = encode_message(&msg, encoded_msg);
-					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
-					broadcast_send(&broadcast);
-				} else if (parent.node_id == decoded_msg.payload.source_id)	{
-					// Update the informations of the parent
-					parent.n_hops = decoded_msg.payload.n_hops + 1;
-					// Broadcast the new tree
-					struct message msg;
-					get_msg(&msg, TREE_ADVERTISEMENT);
-					char *encoded_msg;
-					uint32_t len = encode_message(&msg, encoded_msg);
-					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
-					broadcast_send(&broadcast);
-				}
-				// Update tree version + consider the tree as stable
-				tree_version = decoded_msg.payload.tree_version;
-				tree_stable = 1;
-			}
+			handle_tree_advertisement_msg(decoded_msg);
+			free_message(decoded_msg)
 			break;
 		default;
 	}
@@ -267,6 +278,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 					runicast_send(&runicast, &(parent.addr_via), 1);
 					free_message(data_aggregate_msg);
+					free(encoded_msg);
 					data_aggregate_msg = decoded_msg;
 				} else {
 					// Add to aggregated message payload
@@ -292,10 +304,11 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 					runicast_send(&runicast, &(child.addr_via), 1);
 				}
 			}
-			free_message(message);
+			free_message(decoded_msg);
 			break;
 		case TREE_ADVERTISEMENT:
-			// TODO
+			handle_tree_advertisement_msg(decoded_msg);
+			free_message(decoded_msg)
 		default:
 	}
 }
