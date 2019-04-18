@@ -25,6 +25,11 @@ struct runicast_conn runicast;
 struct broadcast_conn broadcast;
 
 /*-----------------------------------------------------------------------------*/
+/* Sensor settings */
+int send_data = 0; // By default, don't send data
+int send_periodically = 0; // By default, send data only when there is a change (not periodically)
+
+/*-----------------------------------------------------------------------------*/
 /* Save parent + child nodes */
 struct node {
 	struct node *next;
@@ -44,6 +49,7 @@ int tree_stable = 0; // A the beginning, the tree is not stable
 /*-----------------------------------------------------------------------------*/
 /* Message with aggregated data */
 struct message *data_aggregate_msg = NULL;
+int aggregate_msg_timestamp = 0;
 
 /*-----------------------------------------------------------------------------*/
 /* Declaration of the processes */
@@ -268,8 +274,9 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 			break;
 		case SENSOR_DATA:
 			if (data_aggregate_msg == NULL) {
-				// Store this message while waiting for other messages to aggregate (TODO Add timer ?)
+				// Store this message while waiting for other messages to aggregate
 				data_aggregate_msg = decoded_msg;
+				aggregate_msg_timestamp = (int) time();
 			} else {
 				// If too many messages already aggregated, send old messages + save this one as new aggregated message
 				if (data_aggregate_msg.header.length + decoded_msg.header.length > 128) {
@@ -280,6 +287,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 					free_message(data_aggregate_msg);
 					free(encoded_msg);
 					data_aggregate_msg = decoded_msg;
+					aggregate_msg_timestamp = (int) time();
 				} else {
 					// Add to aggregated message payload
 					struct msg_data_payload *current = data_aggregate_msg.payload;
@@ -295,7 +303,10 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 		case SENSOR_CONTROL:
 			// Check if message is destined to this sensor
 			if (my_id == decoded_msg.payload.destination_id) {
-				// TODO Adapt sensor setting
+				// Adapt sensor setting (each control message must contain all settings)
+				send_data = decoded_msg.payload.command & 0x1;
+				send_periodically = (decoded_msg.payload.command & 0x2) >> 1;
+
 			} else {
 				struct node* child = get_child(decoded_msg.payload.destination_id);
 				if (child != NULL) {
