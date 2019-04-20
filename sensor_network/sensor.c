@@ -53,9 +53,8 @@ int aggregate_msg_timestamp = 0;
 
 /*-----------------------------------------------------------------------------*/
 /* Declaration of the processes */
-// TODO
-PROCESS(broadcast_process, "Broadcast process");
-AUTOSTART_PROCESSES(&broadcast_process);
+PROCESS(my_process, "My process");
+AUTOSTART_PROCESSES(&my_process);
 
 /*-----------------------------------------------------------------------------*/
 /* Helper functions */
@@ -280,7 +279,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 }
 
 // Set the function to be called when a broadcast message is received
-static const struct broadcast_callbacks bc = {broadcast_recv};
+static const struct broadcast_callbacks broadcast_callbacks = {broadcast_recv};
 
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a unicast message is received */
@@ -355,20 +354,32 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 }
 
 // Set the function to be called when a broadcast message is received
-static const struct runicast_callbacks rc = {runicast_recv}
+static const struct runicast_callbacks runicast_callbacks = {runicast_recv}
 
-// TODO Open unicast -> runicast_open();
+static void exit_handler(struct *broadcast_conn bc, struct *runicast_conn rc) {
+	broadcast_close(bc);
+	runicast_close(rc);
+}
 
 /*-----------------------------------------------------------------------------*/
 /* Process */
-// TODO 1 process for tree building, 1 for sensor data ? or only 1 process ?
-// Broadcast process
-PROCESS_THREAD(broadcast_process, ev, data)
+PROCESS_THREAD(my_process, ev, data)
 {
 	static struct etimer et;
-	// TODO
+
+	PROCESS_EXITHANDLER(exit_handler(&broadcast, &runicast);)
+
+	PROCESS_BEGIN();
+
+	broadcast_open(&broadcast, 129, &broadcast_callbacks);
+	unicast_open(&runicast, 146, &runicast_callbacks);
+
 	while (1) {
-		// TODO increase time between broadcasts if no tree ?
+		// Every 25 to 35 seconds
+		etimer_set(&et, CLOCK_SECOND * 25 + random_rand() % (CLOCK_SECOND * 10));
+
+    	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+
 		if (parent == NULL) {
 			// Broadcast a TREE_INFORMATION_REQUEST
 			send_broadcast_msg(TREE_INFORMATION_REQUEST);
@@ -376,25 +387,29 @@ PROCESS_THREAD(broadcast_process, ev, data)
 			// Advertise the tree (broadcast a TREE_ADVERTISEMENT)
 			send_broadcast_msg(TREE_ADVERTISEMENT);
 		}
+
+		int timestamp_now = (int) time();
+		// TODO Modify condition + use something else that time() casted to int
+		if (parent.timestamp - timestamp_now > 90) {
+			// Remove parent + ask for tree-rebuild
+			free(parent);
+			tree_stable = 0;
+			// Broadcast a TREE_INFORMATION_REQUEST, with bit set to rebuild tree
+			struct message *msg = (struct message *) malloc(sizeof(struct message));
+			get_msg(&msg, TREE_INFORMATION_REQUEST);
+			msg.payload.request_attributes = 0x1;
+			char *encoded_msg;
+			uint32_t len = encode_message(&msg, encoded_msg);
+			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
+			broadcast_send(&broadcast);
+			free(encoded_msg);
+			free_message(msg);
+		}
+
+		// TODO Send data
 	}
 
-	int timestamp_now = (int) time();
-	// TODO Modify condition + use something else that time() casted to int
-	if (parent.timestamp - timestamp_now > 60) {
-		// Remove parent + ask for tree-rebuild
-		free(parent);
-		// Broadcast a TREE_INFORMATION_REQUEST, with bit set to rebuild tree
-		struct message *msg = (struct message *) malloc(sizeof(struct message));
-		get_msg(&msg, TREE_INFORMATION_REQUEST);
-		msg.payload.request_attributes = 0x1;
-		char *encoded_msg;
-		uint32_t len = encode_message(&msg, encoded_msg);
-		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
-		broadcast_send(&broadcast);
-		free(encoded_msg);
-		free_message(msg);
-	}
+	PROCESS_END();
 }
 
-// TODO Process that generates sensor data, sends it to the root if it attached to a tree, broadcasts a TREE_INFORMATION_REQUEST (every 30 secs?) otherwise.
  
