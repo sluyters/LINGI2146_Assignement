@@ -65,7 +65,7 @@ static void send_aggregate_msg(void *ptr) {
 	uint32_t len = encode_message(data_aggregate_msg, encoded_msg);
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 	runicast_send(&runicast, &(parent.addr_via), 1);
-	free_message(data_aggregate_msg);
+	free_message(&data_aggregate_msg);
 	free(encoded_msg);
 	data_aggregate_msg = NULL;
 }
@@ -73,29 +73,29 @@ static void send_aggregate_msg(void *ptr) {
 /**
  * Adds the new node to the @nodes list, or update its data if it is already present
  */
-static void add_node(struct node *nodes, rimeaddr_t *addr_via, uint8_t node_id, uint8_t n_hops) {
-	if (nodes == NULL) {
+static void add_node(struct node **nodes, rimeaddr_t *addr_via, uint8_t node_id, uint8_t n_hops) {
+	if (*nodes == NULL) {
 		// If the list is empty, create a new node
-		nodes = (node *) malloc(sizeof(struct node));
-		nodes.addr_via = *addr_via;			// Not sure
-		nodes.node_id = node_id;
-		nodes.next = NULL;
-		nodes.n_hops = n_hops;
-		nodes.timestamp = (int) time();
-	} else if (nodes.node_id == node_id && nodes.next == NULL) {
+		*nodes = (node *) malloc(sizeof(struct node));
+		(*nodes).addr_via = *addr_via;			// Not sure
+		(*nodes).node_id = node_id;
+		(*nodes).next = NULL;
+		(*nodes).n_hops = n_hops;
+		(*nodes).timestamp = (int) time();
+	} else if (*nodes.node_id == node_id && *nodes.next == NULL) {
 		// If the first node matches node_id and there is no other node, update it
-		nodes.addr_via = *addr_via;			// Not sure
-		nodes.n_hops = n_hops;
-		nodes.timestamp = (int) time();
+		(*nodes).addr_via = *addr_via;			// Not sure
+		(*nodes).n_hops = n_hops;
+		(*nodes).timestamp = (int) time();
 	} else {
 		// If the list is not empty, check each node until we reach the last node. If a match is found, remove it and add it to the end
-		struct node *current = nodes;
+		struct node *current = *nodes;
 		struct node *previous;
 		// If the first node matches node_id
 		if (current.node_id == node_id) {
-			nodes = current.next;
+			*nodes = current.next;
 			free(current);
-			current = nodes;
+			current = *nodes;
 		}
 		while (current != NULL) {
 			if (current.node_id == node_id) {
@@ -113,7 +113,7 @@ static void add_node(struct node *nodes, rimeaddr_t *addr_via, uint8_t node_id, 
 		new_node.addr_via = *addr_via;			// Not sure
 		new_node.node_id = node_id;
 		new_node.next = NULL;
-		nodes.n_hops = n_hops;
+		new_node.n_hops = n_hops;
 		new_node.timestamp = (int) time();
 	}
 }
@@ -121,24 +121,26 @@ static void add_node(struct node *nodes, rimeaddr_t *addr_via, uint8_t node_id, 
 /**
  * Returns the node corresponding to @node_id from @nodes
  */
-static void remove_node(struct node *nodes, uint8_t node_id) {
-	if (nodes != NULL && nodes.node_id == node_id) {
-		// The node to delete is the first node
-		struct node *deleted_node = nodes;
-		nodes = nodes.next;
-		free(deleted_node);
-	} else if (nodes != NULL) {
-		struct node *current = nodes.next;
-		struct node *previous = nodes;
-		while (current != NULL) {
-			if (current.node_id == node_id) {
-				// Delete node
-				previous.next = current.next;
-				free(current);
-				return;	
+static void remove_node(struct node **nodes, uint8_t node_id) {
+	if (*nodes != NULL) {
+		if ((*nodes).node_id == node_id) {
+			// The node to delete is the first node
+			struct node *deleted_node = *nodes;
+			*nodes = (*nodes).next;
+			free(deleted_node);
+		} else {
+			struct node *current = (*nodes).next;
+			struct node *previous = *nodes;
+			while (current != NULL) {
+				if (current.node_id == node_id) {
+					// Delete node
+					previous.next = current.next;
+					free(current);
+					return;	
+				}
+				previous = current;
+				current = current.next;
 			}
-			previous = current;
-			current = current.next;
 		}
 	}
 }
@@ -146,17 +148,13 @@ static void remove_node(struct node *nodes, uint8_t node_id) {
 /**
  * Removes all the expired nodes from @nodes
  */
-static void remove_expired_nodes(struct node *nodes, int max_elapsed_secs) {
+static void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
 	int now = //TODO
 	struct node *deleted_node;
-	if (nodes != NULL) {
-		current = nodes;
-		while ((now - current.timestamp > max_elapsed_secs) && current != NULL) {
-			deleted_node = current;
-			current = current.next;
-			free(deleted_node);
-		}
-		nodes = current;
+	while (*nodes != NULL && (now - (*nodes).timestamp > max_elapsed_secs)) {
+		deleted_node = *nodes;
+		*nodes = (*nodes).next;
+		free(deleted_node);
 	}
 }
 
@@ -209,7 +207,11 @@ static void get_msg(struct message *msg, int msg_type) {
 		case TREE_INFORMATION_REQUEST:
 			msg.payload = (struct msg_tree_request_payload *) malloc(sizeof(struct msg_tree_request_payload));
 			msg.payload.tree_version = tree_version;
-			msg.payload.request_attributes = tree_stable;
+			if (tree_stable) {
+				msg.payload.request_attributes = 0x0;
+			} else {
+				msg.payload.request_attributes = 0x1;
+			}
 			msg.header.length = sizeof(struct msg_tree_request_payload);
 			break;
 		default:
@@ -227,7 +229,7 @@ static void send_broadcast_msg(int msg_type) {
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 	broadcast_send(&broadcast);
 	free(encoded_msg);
-	free_message(msg);
+	free_message(&msg);
 }
 
 /**
@@ -241,7 +243,7 @@ static void send_runicast_msg(int msg_type, rimeaddr_t *addr_dest) {
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 	runicast_send(&runicast, addr_dest, 1);
 	free(encoded_msg);
-	free_message(msg);
+	free_message(&msg);
 }
 
 static void handle_tree_advertisement_msg(struct message *msg) {
@@ -250,10 +252,10 @@ static void handle_tree_advertisement_msg(struct message *msg) {
 		// Check if new neighbor is better than current parent (automatically better if tree version is greater)
 		if ((msg.payload.tree_version > tree_version || tree_version - msg.payload.tree_version > 245) || ((parent == NULL || msg.payload.n_hops < parent.n_hops) && get_node(childs, msg.payload.source_id) == NULL)) {
 			if (parent != NULL) {
-				remove_node(parent, parent.node_id);
+				remove_node(&parent, parent.node_id);
 			}
 			// Add the new parent
-			add_node(parent, from, msg.payload.source_id, msg.payload.n_hops + 1);
+			add_node(&parent, from, msg.payload.source_id, msg.payload.n_hops + 1);
 			// Send a DESTINATION_ADVERTISEMENT message to the new parent node
 			send_runicast_msg(DESTINATION_ADVERTISEMENT, from);
 			// Broadcast the new tree
@@ -263,7 +265,7 @@ static void handle_tree_advertisement_msg(struct message *msg) {
 			tree_stable = 1;
 		} else if (parent.node_id == msg.payload.source_id)	{
 			// Update the informations of the parent
-			add_node(parent, from, msg.payload.source_id, msg.payload.n_hops + 1);
+			add_node(&parent, from, msg.payload.source_id, msg.payload.n_hops + 1);
 			// Broadcast the new tree
 			send_broadcast_msg(TREE_ADVERTISEMENT);
 			// Update tree version + consider the tree as stable
@@ -300,7 +302,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			break;
 		case TREE_ADVERTISEMENT:
 			handle_tree_advertisement_msg(decoded_msg);
-			free_message(decoded_msg)
+			free_message(&decoded_msg)
 			break;
 		default;
 	}
@@ -322,11 +324,11 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 			// Discard if version < local version
 			if (decoded_msg.payload.tree_version >= tree_version) {
 				// Add to list of childs (or update)
-				add_node(childs, from, decoded_msg.payload.source_id, 0);
+				add_node(&childs, from, decoded_msg.payload.source_id, 0);
 				// Forward message to parent
 				packetbuf_copyfrom(msg, packetbuf_datalen());
 				runicast_send(&runicast, &(parent.addr_via), 1);
-				free_message(decoded_msg);
+				free_message(&decoded_msg);
 			}
 			break;
 		case SENSOR_DATA:
@@ -341,10 +343,10 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 					uint32_t len = encode_message(data_aggregate_msg, encoded_msg);
 					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 					runicast_send(&runicast, &(parent.addr_via), 1);
-					free_message(data_aggregate_msg);
+					free_message(&data_aggregate_msg);
 					free(encoded_msg);
 					data_aggregate_msg = decoded_msg;
-					ctimer_reset(&aggregate_ctimer, CLOCK_SECOND * 30, send_aggregate_msg, NULL);
+					ctimer_reset(&aggregate_ctimer);
 				} else {
 					// Add to aggregated message payload
 					struct msg_data_payload *current = data_aggregate_msg.payload;
@@ -353,7 +355,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 					}
 					current.next = decoded_msg.payload;
 					decoded_msg.payload = NULL; // Avoid conflits when freeing the message
-					free_message(decoded_msg);
+					free_message(&decoded_msg);
 				}
 			}
 			break;
@@ -372,11 +374,11 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 					runicast_send(&runicast, &(child.addr_via), 1);
 				}
 			}
-			free_message(decoded_msg);
+			free_message(&decoded_msg);
 			break;
 		case TREE_ADVERTISEMENT:
 			handle_tree_advertisement_msg(decoded_msg);
-			free_message(decoded_msg)
+			free_message(&decoded_msg)
 		default:
 	}
 }
@@ -395,11 +397,10 @@ PROCESS_THREAD(my_process, ev, data)
 {
 	static struct etimer et;
 
-	PROCESS_EXITHANDLER(exit_handler(&broadcast, &runicast);)
+	PROCESS_EXITHANDLER(exit_handler(&broadcast, &runicast);) // Modify
 
 	PROCESS_BEGIN();
 
-	broadcast_open(&broadcast, 129, &broadcast_callbacks);
 	unicast_open(&runicast, 146, &runicast_callbacks);
 
 	while (1) {
@@ -408,7 +409,9 @@ PROCESS_THREAD(my_process, ev, data)
 
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
+		remove_expired_nodes(&parent, 90);
 		if (parent == NULL) {
+			tree_stable = 0;
 			// Broadcast a TREE_INFORMATION_REQUEST
 			send_broadcast_msg(TREE_INFORMATION_REQUEST);
 		} else {
@@ -416,31 +419,52 @@ PROCESS_THREAD(my_process, ev, data)
 			send_broadcast_msg(TREE_ADVERTISEMENT);
 		}
 
-		int timestamp_now = (int) time();
-		// TODO Modify condition + use something else that time() casted to int
-		if (parent.timestamp - timestamp_now > 90) {
-			// Remove parent + ask for tree-rebuild
-			free(parent);
-			tree_stable = 0;
-			// Broadcast a TREE_INFORMATION_REQUEST, with bit set to rebuild tree
-			struct message *msg = (struct message *) malloc(sizeof(struct message));
-			get_msg(&msg, TREE_INFORMATION_REQUEST);
-			msg.payload.request_attributes = 0x1;
-			char *encoded_msg;
-			uint32_t len = encode_message(&msg, encoded_msg);
-			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
-			broadcast_send(&broadcast);
-			free(encoded_msg);
-			free_message(msg);
-		}
-
-		// TODO remove childs that have not sent any message since a long time
-
-		// TODO Send data
+		// Remove childs that have not sent any message since a long time (more than 240 seconds)
+		remove_expired_nodes(&childs, 240);
 	}
 
 	PROCESS_END();
 }
 
- 
-// TODO Modify functions so that the pointers they take as argument are correct
+PROCESS_THREAD(sensor_process, ev, data)
+{
+	static struct etimer et;
+	uint8_t iter = 0;
+
+	PROCESS_EXITHANDLER(exit_handler(&broadcast, &runicast);) // Modify
+
+	PROCESS_BEGIN();
+
+	broadcast_open(&broadcast, 129, &broadcast_callbacks);
+
+	while (1) {
+		iter += 1;
+		// Every 20 to 40 seconds
+		etimer_set(&et, CLOCK_SECOND * 20 + random_rand() % (CLOCK_SECOND * 20));
+
+    	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+
+		// TODO Generate data, initialize payload
+
+		// Send data
+		if (childs == NULL) {
+			// Send data directly (no need to aggregate)
+			// TODO
+			char *encoded_msg;
+			uint32_t len = encode_message(msg, encoded_msg);
+			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
+			runicast_send(&runicast, &(parent.addr_via), 1);
+			free_message(&msg);
+			free(encoded_msg);
+		} else {
+			// TODO Wait to aggregate data
+		}
+
+		// Send DESTINATION_ADVERTISEMENT to indicate that this node is still up (every 120 seconds)
+		if (iter % 4 == 0) {
+			send_runicast_msg(TREE_ADVERTISEMENT, &(parent.addr_via));
+		}
+	}
+
+	PROCESS_END();
+}

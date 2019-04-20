@@ -89,12 +89,12 @@ static void decode_message(struct message *decoded_msg, char *encoded_msg, uint1
 	}
 }
 
-static void free_message(struct message *msg) {
-	free(msg.header);
-	if (msg.payload != NULL) {
-		if (msg.header.msg_type == SENSOR_DATA) {
+static void free_message(struct message **msg) {
+	free((*msg).header);
+	if ((*msg).payload != NULL) {
+		if ((*msg).header.msg_type == SENSOR_DATA) {
 			// Free all aggregated data
-			struct msg_data_payload *current = msg.payload;
+			struct msg_data_payload *current = (*msg).payload;
 			struct msg_data_payload *previous;
 			while (current != NULL) {
 				free(current->data);
@@ -104,8 +104,9 @@ static void free_message(struct message *msg) {
 				free(previous);
 			}
 		} else {
-			free(msg.payload);
+			free((*msg).payload);
 		}
 	}
-	free(msg);
+	free(*msg);
+    *msg = NULL
 }
