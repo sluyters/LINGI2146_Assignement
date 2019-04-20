@@ -164,7 +164,7 @@ static void get_msg(struct message *msg, int msg_type) {
 
 static void handle_tree_advertisement_msg(struct message *msg) {
 	// Check version, if version >= local version, process the TREE_ADVERTISEMENT message
-	if (msg.payload.tree_version >= tree_version) {
+	if (msg.payload.tree_version >= tree_version || tree_version - msg.payload.tree_version > 245) {
 		// Check if new neighbor is better than current parent (automatically better if tree version is greater)
 		if ((msg.payload.tree_version > tree_version || tree_version - msg.payload.tree_version > 245) || ((parent == NULL || msg.payload.n_hops < parent.n_hops) && get_child(msg.payload.source_id) == NULL)) {
 			if (parent == NULL) {
@@ -173,6 +173,7 @@ static void handle_tree_advertisement_msg(struct message *msg) {
 			}
 			parent.addr = *from;		// Not sure
 			parent.n_hops = msg.payload.n_hops + 1;
+			parent.timestamp = (int) time();
 			// Send a DESTINATION_ADVERTISEMENT message to the new parent node
 			struct message *dest_msg = (struct message *) malloc(sizeof(struct message));	
 			get_msg(dest_msg, DESTINATION_ADVERTISEMENT);
@@ -190,9 +191,13 @@ static void handle_tree_advertisement_msg(struct message *msg) {
 			broadcast_send(&broadcast);
 			free(encoded_msg);
 			free_message(ad_msg);
+			// Update tree version + consider the tree as stable
+			tree_version = msg.payload.tree_version;
+			tree_stable = 1;
 		} else if (parent.node_id == msg.payload.source_id)	{
 			// Update the informations of the parent
 			parent.n_hops = msg.payload.n_hops + 1;
+			parent.timestamp = (int) time();
 			// Broadcast the new tree
 			struct message *ad_msg = (struct message *) malloc(sizeof(struct message));	
 			get_msg(&ad_msg, TREE_ADVERTISEMENT);
@@ -202,10 +207,10 @@ static void handle_tree_advertisement_msg(struct message *msg) {
 			broadcast_send(&broadcast);
 			free(encoded_msg);
 			free_message(ad_msg);
+			// Update tree version + consider the tree as stable
+			tree_version = msg.payload.tree_version;
+			tree_stable = 1;
 		}
-		// Update tree version + consider the tree as stable
-		tree_version = msg.payload.tree_version;
-		tree_stable = 1;
 	}
 }
 
@@ -338,20 +343,47 @@ PROCESS_THREAD(broadcast_process, ev, data)
 	static struct etimer et;
 	// TODO
 	while (1) {
-		// TODO more specific condition (increase time between broadcasts if no tree ?
+		// TODO increase time between broadcasts if no tree ?
 		if (parent == NULL) {
 			// Broadcast a TREE_INFORMATION_REQUEST
-			struct message msg;
+			struct message *msg = (struct message *) malloc(sizeof(struct message));
 			get_msg(&msg, TREE_INFORMATION_REQUEST);
 			char *encoded_msg;
 			uint32_t len = encode_message(&msg, encoded_msg);
 			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
 			broadcast_send(&broadcast);
-		} 
+			free(encoded_msg);
+			free_message(msg);
+		} else {
+			// Advertise the tree (broadcast a TREE_ADVERTISEMENT)
+			struct message *msg = (struct message *) malloc(sizeof(struct message));	
+			get_msg(msg, TREE_ADVERTISEMENT);
+			char *encoded_msg;
+			uint32_t len = encode_message(msg, encoded_msg);
+			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
+			broadcast_send(&broadcast);
+			free(encoded_msg);
+			free_message(msg);
+		}
+	}
+
+	int timestamp_now = (int) time();
+	// TODO Modify condition + use something else that time() casted to int
+	if (parent.timestamp - timestamp_now > 60) {
+		// Remove parent + ask for tree-rebuild
+		free(parent);
+		// Broadcast a TREE_INFORMATION_REQUEST, with bit set to rebuild tree
+		struct message *msg = (struct message *) malloc(sizeof(struct message));
+		get_msg(&msg, TREE_INFORMATION_REQUEST);
+		msg.payload.request_attributes = 0x1;
+		char *encoded_msg;
+		uint32_t len = encode_message(&msg, encoded_msg);
+		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet				
+		broadcast_send(&broadcast);
+		free(encoded_msg);
+		free_message(msg);
 	}
 }
 
 // TODO Process that generates sensor data, sends it to the root if it attached to a tree, broadcasts a TREE_INFORMATION_REQUEST (every 30 secs?) otherwise.
-// TODO Regularly broadcast TREE_ADVERTISEMENT messages ?
-// TODO How to check if the parent node is still up ? -> TREE_BREAKDOWN_NOTIF sent from parent when a SENSOR_DATA message is received ? -> add tree version ?
  
