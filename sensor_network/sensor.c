@@ -49,7 +49,7 @@ int tree_stable = 0; // A the beginning, the tree is not stable
 /*-----------------------------------------------------------------------------*/
 /* Message with aggregated data */
 struct message *data_aggregate_msg = NULL;
-int aggregate_msg_timestamp = 0;
+struct ctimer aggregate_ctimer;
 
 /*-----------------------------------------------------------------------------*/
 /* Declaration of the processes */
@@ -58,6 +58,17 @@ AUTOSTART_PROCESSES(&my_process);
 
 /*-----------------------------------------------------------------------------*/
 /* Helper functions */
+
+/* Callback function when the time of aggregate messages ends */
+static void send_aggregate_msg(void *ptr) {
+	char *encoded_msg;
+	uint32_t len = encode_message(data_aggregate_msg, encoded_msg);
+	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
+	runicast_send(&runicast, &(parent.addr_via), 1);
+	free_message(data_aggregate_msg);
+	free(encoded_msg);
+	data_aggregate_msg = NULL;
+}
 
 /**
  * Adds the new node to the @nodes list, or update its data if it is already present
@@ -303,9 +314,9 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 			break;
 		case SENSOR_DATA:
 			if (data_aggregate_msg == NULL) {
-				// Store this message while waiting for other messages to aggregate
+				// Store this message while waiting for other messages to aggregate + set timer
 				data_aggregate_msg = decoded_msg;
-				aggregate_msg_timestamp = (int) time();
+				ctimer_set(&aggregate_ctimer, CLOCK_SECOND * 30, send_aggregate_msg, NULL);
 			} else {
 				// If too many messages already aggregated, send old messages + save this one as new aggregated message
 				if (data_aggregate_msg.header.length + decoded_msg.header.length > 128) {
@@ -316,7 +327,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 					free_message(data_aggregate_msg);
 					free(encoded_msg);
 					data_aggregate_msg = decoded_msg;
-					aggregate_msg_timestamp = (int) time();
+					ctimer_reset(&aggregate_ctimer, CLOCK_SECOND * 30, send_aggregate_msg, NULL);
 				} else {
 					// Add to aggregated message payload
 					struct msg_data_payload *current = data_aggregate_msg.payload;
@@ -405,6 +416,8 @@ PROCESS_THREAD(my_process, ev, data)
 			free(encoded_msg);
 			free_message(msg);
 		}
+
+		// TODO remove childs that have not sent any message since a long time
 
 		// TODO Send data
 	}
