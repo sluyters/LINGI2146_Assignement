@@ -1,5 +1,7 @@
 #include "message.h"
 
+
+// TODO Fix problem with pointers -> put ** or modify functions so that it is not necessary
 static uint32_t encode_message(struct message *decoded_msg, char *encoded_msg) {
 	uint32_t length = decoded_msg.header.length + sizeof(struct msg_header);
 	// Allocate memory for encoded message
@@ -89,12 +91,12 @@ static void decode_message(struct message *decoded_msg, char *encoded_msg, uint1
 	}
 }
 
-static void free_message(struct message **msg) {
-	free((*msg).header);
-	if ((*msg).payload != NULL) {
-		if ((*msg).header.msg_type == SENSOR_DATA) {
+static void free_message(struct message *msg) {
+	free(msg.header);
+	if (msg.payload != NULL) {
+		if (msg.header.msg_type == SENSOR_DATA) {
 			// Free all aggregated data
-			struct msg_data_payload *current = (*msg).payload;
+			struct msg_data_payload *current = msg.payload;
 			struct msg_data_payload *previous;
 			while (current != NULL) {
 				free(current->data);
@@ -104,9 +106,8 @@ static void free_message(struct message **msg) {
 				free(previous);
 			}
 		} else {
-			free((*msg).payload);
+			free(msg.payload);
 		}
 	}
-	free(*msg);
-    *msg = NULL
+	free(msg);
 }

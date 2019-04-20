@@ -65,7 +65,7 @@ static void send_aggregate_msg(void *ptr) {
 	uint32_t len = encode_message(data_aggregate_msg, encoded_msg);
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 	runicast_send(&runicast, &(parent.addr_via), 1);
-	free_message(&data_aggregate_msg);
+	free_message(data_aggregate_msg);
 	free(encoded_msg);
 	data_aggregate_msg = NULL;
 }
@@ -191,6 +191,10 @@ static void get_msg(struct message *msg, int msg_type) {
 	msg.header.version = version;
 	msg.header.type = msg_type;
 	switch (msg_type) {
+		case SENSOR_DATA:
+			msg.payload = NULL;
+			msg.header.length = 0;
+			break;
 		case TREE_ADVERTISEMENT:
 			msg.payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
 			msg.payload.n_hops = parent.n_hops;
@@ -229,7 +233,7 @@ static void send_broadcast_msg(int msg_type) {
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 	broadcast_send(&broadcast);
 	free(encoded_msg);
-	free_message(&msg);
+	free_message(msg);
 }
 
 /**
@@ -243,7 +247,7 @@ static void send_runicast_msg(int msg_type, rimeaddr_t *addr_dest) {
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 	runicast_send(&runicast, addr_dest, 1);
 	free(encoded_msg);
-	free_message(&msg);
+	free_message(msg);
 }
 
 static void handle_tree_advertisement_msg(struct message *msg) {
@@ -275,6 +279,43 @@ static void handle_tree_advertisement_msg(struct message *msg) {
 	}
 }
 
+
+static void handle_sensor_data_msg(struct message *msg) {
+	if (childs == NULL) {
+		// If no child, send data directly (no need to aggregate)
+		char *encoded_msg;
+		uint32_t len = encode_message(msg, encoded_msg);
+		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
+		runicast_send(&runicast, &(parent.addr_via), 1);
+		free_message(msg);
+		free(encoded_msg);
+	} else if (data_aggregate_msg == NULL) {
+		// Store this message while waiting for other messages to aggregate + set timer
+		data_aggregate_msg = msg;
+		ctimer_set(&aggregate_ctimer, CLOCK_SECOND * 30, send_aggregate_msg, NULL);
+	} else if (data_aggregate_msg.header.length + msg.header.length > 128) {
+		// If too many messages already aggregated, send old messages + save this one as new aggregated message
+		char *encoded_msg;
+		uint32_t len = encode_message(data_aggregate_msg, encoded_msg);
+		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
+		runicast_send(&runicast, &(parent.addr_via), 1);
+		free_message(data_aggregate_msg);
+		free(encoded_msg);
+		data_aggregate_msg = msg;
+		ctimer_reset(&aggregate_ctimer);
+	} else {
+		// Add to aggregated message payload
+		struct msg_data_payload *current = data_aggregate_msg.payload;
+		while (current.next != NULL) {
+			current = current.next
+		}
+		current.next = msg.payload;
+		data_aggregate_msg.header.length += msg.header.length;
+		msg.payload = NULL; // Avoid conflits when freeing the message
+		free_message(msg);
+	}
+}
+
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a broadcast message is received */
 static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
@@ -302,7 +343,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			break;
 		case TREE_ADVERTISEMENT:
 			handle_tree_advertisement_msg(decoded_msg);
-			free_message(&decoded_msg)
+			free_message(decoded_msg)
 			break;
 		default;
 	}
@@ -328,36 +369,11 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 				// Forward message to parent
 				packetbuf_copyfrom(msg, packetbuf_datalen());
 				runicast_send(&runicast, &(parent.addr_via), 1);
-				free_message(&decoded_msg);
+				free_message(decoded_msg);
 			}
 			break;
 		case SENSOR_DATA:
-			if (data_aggregate_msg == NULL) {
-				// Store this message while waiting for other messages to aggregate + set timer
-				data_aggregate_msg = decoded_msg;
-				ctimer_set(&aggregate_ctimer, CLOCK_SECOND * 30, send_aggregate_msg, NULL);
-			} else {
-				// If too many messages already aggregated, send old messages + save this one as new aggregated message
-				if (data_aggregate_msg.header.length + decoded_msg.header.length > 128) {
-					char *encoded_msg;
-					uint32_t len = encode_message(data_aggregate_msg, encoded_msg);
-					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-					runicast_send(&runicast, &(parent.addr_via), 1);
-					free_message(&data_aggregate_msg);
-					free(encoded_msg);
-					data_aggregate_msg = decoded_msg;
-					ctimer_reset(&aggregate_ctimer);
-				} else {
-					// Add to aggregated message payload
-					struct msg_data_payload *current = data_aggregate_msg.payload;
-					while (current.next != NULL) {
-						current = current.next
-					}
-					current.next = decoded_msg.payload;
-					decoded_msg.payload = NULL; // Avoid conflits when freeing the message
-					free_message(&decoded_msg);
-				}
-			}
+			handle_sensor_data_msg(decoded_msg);
 			break;
 		case SENSOR_CONTROL:
 			// Check if message is destined to this sensor
@@ -374,11 +390,11 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 					runicast_send(&runicast, &(child.addr_via), 1);
 				}
 			}
-			free_message(&decoded_msg);
+			free_message(decoded_msg);
 			break;
 		case TREE_ADVERTISEMENT:
 			handle_tree_advertisement_msg(decoded_msg);
-			free_message(&decoded_msg)
+			free_message(decoded_msg)
 		default:
 	}
 }
@@ -444,21 +460,16 @@ PROCESS_THREAD(sensor_process, ev, data)
 
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
-		// TODO Generate data, initialize payload
+		// TODO Generate data, create message
+		struct message *msg = (struct message *) malloc(sizeof(struct message));	
+		get_msg(msg, SENSOR_DATA);
+		struct msg_data_payload_h *payload = (struct msg_data_payload_h *) malloc(); // TODO
+		// TODO set payload
+		msg.payload = payload;
+		msg.header.length = ; // TODO
 
 		// Send data
-		if (childs == NULL) {
-			// Send data directly (no need to aggregate)
-			// TODO
-			char *encoded_msg;
-			uint32_t len = encode_message(msg, encoded_msg);
-			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-			runicast_send(&runicast, &(parent.addr_via), 1);
-			free_message(&msg);
-			free(encoded_msg);
-		} else {
-			// TODO Wait to aggregate data
-		}
+		handle_sensor_data_msg(msg);
 
 		// Send DESTINATION_ADVERTISEMENT to indicate that this node is still up (every 120 seconds)
 		if (iter % 4 == 0) {
