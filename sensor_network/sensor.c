@@ -144,6 +144,23 @@ static void remove_node(struct node *nodes, uint8_t node_id) {
 }
 
 /**
+ * Removes all the expired nodes from @nodes
+ */
+static void remove_expired_nodes(struct node *nodes, int max_elapsed_secs) {
+	int now = //TODO
+	struct node *deleted_node;
+	if (nodes != NULL) {
+		current = nodes;
+		while ((now - current.timestamp > max_elapsed_secs) && current != NULL) {
+			deleted_node = current;
+			current = current.next;
+			free(deleted_node);
+		}
+		nodes = current;
+	}
+}
+
+/**
  * Returns the node corresponding to |node_id if present in @nodes, NULL otherwise
  */
 static node *get_node(struct node *nodes, uint8_t node_id) {
@@ -426,3 +443,4 @@ PROCESS_THREAD(my_process, ev, data)
 }
 
  
+// TODO Modify functions so that the pointers they take as argument are correct
