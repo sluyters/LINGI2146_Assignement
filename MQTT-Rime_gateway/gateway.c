@@ -66,6 +66,10 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 	switch (decoded_msg.header.msg_type) {
 		case DESTINATION_ADVERTISEMENT:
 			// TODO Add this sensor to the list of sensors + add its subject to the list of subjects
+			// If subject not in list of subjects, add subject
+
+			// Else, add add sensor to this subject
+			
 			break;
 		case SENSOR_DATA:
 			// TODO Send data to the receivers. If no receiver for this data, send a SENSOR_CONTROL message to the sensor(s) sending this data to disable it
