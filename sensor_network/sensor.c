@@ -81,12 +81,12 @@ static void add_node(struct node **nodes, rimeaddr_t *addr_via, uint8_t node_id,
 		(*nodes).node_id = node_id;
 		(*nodes).next = NULL;
 		(*nodes).n_hops = n_hops;
-		(*nodes).timestamp = (int) time();
+		(*nodes).timestamp = (int) time(NULL);
 	} else if (*nodes.node_id == node_id && *nodes.next == NULL) {
 		// If the first node matches node_id and there is no other node, update it
 		(*nodes).addr_via = *addr_via;			// Not sure
 		(*nodes).n_hops = n_hops;
-		(*nodes).timestamp = (int) time();
+		(*nodes).timestamp = (int) time(NULL);
 	} else {
 		// If the list is not empty, check each node until we reach the last node. If a match is found, remove it and add it to the end
 		struct node *current = *nodes;
@@ -114,7 +114,7 @@ static void add_node(struct node **nodes, rimeaddr_t *addr_via, uint8_t node_id,
 		new_node.node_id = node_id;
 		new_node.next = NULL;
 		new_node.n_hops = n_hops;
-		new_node.timestamp = (int) time();
+		new_node.timestamp = (int) time(NULL);
 	}
 }
 
@@ -149,7 +149,7 @@ static void remove_node(struct node **nodes, uint8_t node_id) {
  * Removes all the expired nodes from @nodes
  */
 static void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
-	int now = //TODO
+	int now = (int) time(NULL);
 	struct node *deleted_node;
 	while (*nodes != NULL && (now - (*nodes).timestamp > max_elapsed_secs)) {
 		deleted_node = *nodes;
@@ -402,10 +402,12 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 // Set the function to be called when a broadcast message is received
 static const struct runicast_callbacks runicast_callbacks = {runicast_recv}
 
+/*
 static void exit_handler(struct *broadcast_conn bc, struct *runicast_conn rc) {
 	broadcast_close(bc);
 	runicast_close(rc);
 }
+*/
 
 /*-----------------------------------------------------------------------------*/
 /* Process */
@@ -413,7 +415,7 @@ PROCESS_THREAD(my_process, ev, data)
 {
 	static struct etimer et;
 
-	PROCESS_EXITHANDLER(exit_handler(&broadcast, &runicast);) // Modify
+	PROCESS_EXITHANDLER(broadcast_close(&broadcast);) 
 
 	PROCESS_BEGIN();
 
@@ -447,7 +449,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 	static struct etimer et;
 	uint8_t iter = 0;
 
-	PROCESS_EXITHANDLER(exit_handler(&broadcast, &runicast);) // Modify
+	PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
 	PROCESS_BEGIN();
 
@@ -466,7 +468,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 		msg.payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
 		msg.payload.data_header =  (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
 		msg.payload.data_header.source_id = my_id;
-		msg.payload.data_header.topic_id = 42;
+		msg.payload.data_header.subject_id = 42;
 		msg.payload.data_header.length = sizeof(int);
 		int *data = (int *) malloc(sizeof(int));
 		*data = 69; // Sensor value

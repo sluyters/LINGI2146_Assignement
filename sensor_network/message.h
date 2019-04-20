@@ -44,7 +44,7 @@ struct msg_tree_request_payload {
 
 struct msg_data_payload_h {
 	uint8_t source_id;
-	uint8_t topic_id;
+	uint8_t subject_id;
 	uint8_t length;
 }
 

@@ -12,6 +12,15 @@
 uint8_t my_id = 0; // TODO Modify this
 uint8_t tree_version = 0; 
 
+// List of subjects, their subscribers and the sensor corresponding to this subject
+// TODO multiple sensors per subject ? or unique sensor per subject ?
+struct subject {
+	struct node *sensor;
+	struct xxx *subscribers; // TODO
+	char *subject_name;
+	uint8_t subject_id; 
+}
+
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a broadcast message is received */
 static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
