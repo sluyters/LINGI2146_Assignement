@@ -67,8 +67,8 @@ struct message {
 /*-----------------------------------------------------------------------------*/
 /* Functions */
 
-static uint32_t encode_message(struct message *decoded_msg, char *encoded_msg);
+static uint32_t encode_message(struct message *decoded_msg, char **encoded_msg);
 
-static void decode_message(struct message *decoded_msg, char *encoded_msg, uint16_t msg_len); 
+static void decode_message(struct message **decoded_msg, char *encoded_msg, uint16_t msg_len); 
 
 static void free_message(struct message *msg);

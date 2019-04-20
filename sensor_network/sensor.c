@@ -62,7 +62,7 @@ AUTOSTART_PROCESSES(&my_process);
 /* Callback function when the time of aggregate messages ends */
 static void send_aggregate_msg(void *ptr) {
 	char *encoded_msg;
-	uint32_t len = encode_message(data_aggregate_msg, encoded_msg);
+	uint32_t len = encode_message(data_aggregate_msg, &encoded_msg);
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 	runicast_send(&runicast, &(parent.addr_via), 1);
 	free_message(data_aggregate_msg);
@@ -229,7 +229,7 @@ static void send_broadcast_msg(int msg_type) {
 	struct message *msg = (struct message *) malloc(sizeof(struct message));
 	char *encoded_msg;	
 	get_msg(msg, msg_type);
-	uint32_t len = encode_message(msg, encoded_msg);
+	uint32_t len = encode_message(msg, &encoded_msg);
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 	broadcast_send(&broadcast);
 	free(encoded_msg);
@@ -243,7 +243,7 @@ static void send_runicast_msg(int msg_type, rimeaddr_t *addr_dest) {
 	struct message *msg = (struct message *) malloc(sizeof(struct message));
 	char *encoded_msg;	
 	get_msg(msg, msg_type);
-	uint32_t len = encode_message(msg, encoded_msg);
+	uint32_t len = encode_message(msg, &encoded_msg);
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 	runicast_send(&runicast, addr_dest, 1);
 	free(encoded_msg);
@@ -284,7 +284,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 	if (childs == NULL) {
 		// If no child, send data directly (no need to aggregate)
 		char *encoded_msg;
-		uint32_t len = encode_message(msg, encoded_msg);
+		uint32_t len = encode_message(msg, &encoded_msg);
 		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 		runicast_send(&runicast, &(parent.addr_via), 1);
 		free_message(msg);
@@ -296,7 +296,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 	} else if (data_aggregate_msg.header.length + msg.header.length > 128) {
 		// If too many messages already aggregated, send old messages + save this one as new aggregated message
 		char *encoded_msg;
-		uint32_t len = encode_message(data_aggregate_msg, encoded_msg);
+		uint32_t len = encode_message(data_aggregate_msg, &encoded_msg);
 		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 		runicast_send(&runicast, &(parent.addr_via), 1);
 		free_message(data_aggregate_msg);
@@ -322,7 +322,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
 	char *encoded_msg = packetbuf_dataptr();
 	struct message *decoded_msg;
-	decode_message(decoded_msg, encoded_msg, packetbuf_datalen());
+	decode_message(&decoded_msg, encoded_msg, packetbuf_datalen());
 	
 	switch (decoded_msg.header.msg_type) {
 		case TREE_INFORMATION_REQUEST:
@@ -358,7 +358,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
 	char *encoded_msg = packetbuf_dataptr();
 	struct message *decoded_msg;
-	decode_message(struct message *decoded_msg, encoded_msg, packetbuf_datalen());
+	decode_message(&decoded_msg, encoded_msg, packetbuf_datalen());
 
 	switch (decoded_msg.header.msg_type) {
 		case DESTINATION_ADVERTISEMENT:
@@ -463,10 +463,15 @@ PROCESS_THREAD(sensor_process, ev, data)
 		// TODO Generate data, create message
 		struct message *msg = (struct message *) malloc(sizeof(struct message));	
 		get_msg(msg, SENSOR_DATA);
-		struct msg_data_payload_h *payload = (struct msg_data_payload_h *) malloc(); // TODO
-		// TODO set payload
-		msg.payload = payload;
-		msg.header.length = ; // TODO
+		msg.payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+		msg.payload.data_header =  (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
+		msg.payload.data_header.source_id = my_id;
+		msg.payload.data_header.topic_id = 42;
+		msg.payload.data_header.length = sizeof(int);
+		int *data = (int *) malloc(sizeof(int));
+		*data = 69; // Sensor value
+		msg.payload.data = data;
+		msg.header.length = sizeof(struct msg_data_payload_h) + sizeof(int);
 
 		// Send data
 		handle_sensor_data_msg(msg);
