@@ -59,6 +59,7 @@ AUTOSTART_PROCESSES(&broadcast_process);
 
 /*-----------------------------------------------------------------------------*/
 /* Helper functions */
+
 /**
  * Adds the new node to the @nodes list, or update its data if it is already present
  */
@@ -107,6 +108,9 @@ static void add_node(struct node *nodes, rimeaddr_t *addr_via, uint8_t node_id, 
 	}
 }
 
+/**
+ * Returns the node corresponding to @node_id from @nodes
+ */
 static void remove_node(struct node *nodes, uint8_t node_id) {
 	if (nodes != NULL && nodes.node_id == node_id) {
 		// The node to delete is the first node
@@ -129,6 +133,9 @@ static void remove_node(struct node *nodes, uint8_t node_id) {
 	}
 }
 
+/**
+ * Returns the node corresponding to |node_id if present in @nodes, NULL otherwise
+ */
 static node *get_node(struct node *nodes, uint8_t node_id) {
 	struct node *current = nodes;
 	while (current != NULL) {
