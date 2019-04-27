@@ -23,7 +23,7 @@ def handle_cmd():
 
 def sensors_interface(mqttc):
     # Start serialdump tool
-    p = subprocess.Popen("", input = subprocess.PIPE, output = subprocess.PIPE)
+    p = subprocess.Popen("../../tools/sky/serialdump-linux -b115200 /dev/ttyUSB0 ", input = subprocess.PIPE, output = subprocess.PIPE)
     while True:
         stdoutdata, stderrdata = p.communicate()
         if stdoutdata != None:

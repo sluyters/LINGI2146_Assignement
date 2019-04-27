@@ -9,20 +9,10 @@
 
 #include "net/rime/rime.h"
 
-uint8_t my_id = 0; // TODO Modify this
+uint8_t my_id = 0;
 uint8_t tree_version = 0; 
 
-// List of subjects, their subscribers and the sensors corresponding to this subject
-// TODO multiple sensors per subject ? or unique sensor per subject ?
-struct subject {
-	struct node *sensors = NULL;
-	struct xxx *subscribers = NULL; // TODO
-	char *subject_name = NULL;
-	uint8_t subject_id; 
-	struct subject *next = NULL;
-}
-
-struct subject *subjects = NULL;
+// TODO If no receiver for this data, send a SENSOR_CONTROL message to the sensor(s) sending this data to disable it
 
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a broadcast message is received */
@@ -68,39 +58,14 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 
 	switch (decoded_msg.header.msg_type) {
 		case DESTINATION_ADVERTISEMENT:
-			// TODO Add this sensor to the list of sensors + add its subject to the list of subjects
-			struct msg_data_payload *current_subject = subjects;
-			while (current_subject != NULL) {
-				if (current_subject.subject_id == current_payload.data_header.subject_id) {
-					// Check if sensor already in the list of sensors -> update timestamp
-				}
-				current_subject = current_subject.next;
-			}
-			if (current_subject == NULL) {
-				// If no subject corresponds to this data, add it to the list + send SENSOR_CONTROL
-			}
-
+			// TODO
 			break;
 		case SENSOR_DATA:
-			// TODO Send data to the receivers. If no receiver for this data, send a SENSOR_CONTROL message to the sensor(s) sending this data to disable it
+			// Send data to the gateway.
 			struct msg_data_payload *current_payload = decoded_msg.payload;
 			// Go through each data in the message
 			while(current_payload != NULL) {
-				// Check if there is a receiver for this data
-				struct msg_data_payload *current_subject = subjects;
-				while (current_subject != NULL) {
-					if (current_subject.subject_id == current_payload.data_header.subject_id) {
-						if (current_subject.subscribers == NULL) {
-							// Send SENSOR_CONTROL message to the sensors to stop sending data
-						} else {
-							// Send data to subscribers
-						}
-					}
-					current_subject = current_subject.next;
-				}
-				if (current_subject == NULL) {
-					// If no subject corresponds to this data, add it to the list + send SENSOR_CONTROL
-				}
+				printf("PUBLISH %d %d %s\n", current_payload.data_header.source_id, current_payload.data_header.subject_id, (char *) current_payload.data);
 				current_payload = current_payload.next;
 			}
 			break;
