@@ -425,30 +425,31 @@ static void send_runicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
 }
 
 // TODO from undeclared (line 433)
-static void handle_tree_advertisement_msg(struct message *msg) {
+static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t *from) {
 	// Check version, if version >= local version, process the TREE_ADVERTISEMENT message
-	if (msg->payload->tree_version >= tree_version || tree_version - msg->payload->tree_version > 245) {
+	struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) msg->payload;
+	if (payload->tree_version >= tree_version || tree_version - payload->tree_version > 245) {
 		// Check if new neighbor is better than current parent (automatically better if tree version is greater)
-		if ((msg->payload->tree_version > tree_version || tree_version - msg->payload->tree_version > 245) || ((parent == NULL || msg->payload->n_hops < parent.n_hops) && get_node(childs, msg->payload->source_id) == NULL)) {
+		if ((payload->tree_version > tree_version || tree_version - payload->tree_version > 245) || ((parent == NULL || payload->n_hops < parent->n_hops) && get_node(childs, payload->source_id) == NULL)) {
 			if (parent != NULL) {
-				remove_node(&parent, parent.node_id);
+				remove_node(&parent, parent->node_id);
 			}
 			// Add the new parent
-			add_node(&parent, from, msg->payload->source_id, msg->payload->n_hops + 1);
+			add_node(&parent, from, payload->source_id, payload->n_hops + 1);
 			// Send a DESTINATION_ADVERTISEMENT message to the new parent node
 			send_runicast_msg(DESTINATION_ADVERTISEMENT, from);
 			// Broadcast the new tree
 			send_broadcast_msg(TREE_ADVERTISEMENT);
 			// Update tree version + consider the tree as stable
-			tree_version = msg->payload->tree_version;
+			tree_version = payload->tree_version;
 			tree_stable = 1;
-		} else if (parent.node_id == msg->payload->source_id)	{
+		} else if (parent->node_id == payload->source_id)	{
 			// Update the informations of the parent
-			add_node(&parent, from, msg->payload->source_id, msg->payload->n_hops + 1);
+			add_node(&parent, from, payload->source_id, payload->n_hops + 1);
 			// Broadcast the new tree
 			send_broadcast_msg(TREE_ADVERTISEMENT);
 			// Update tree version + consider the tree as stable
-			tree_version = msg->payload->tree_version;
+			tree_version = payload->tree_version;
 			tree_stable = 1;
 		}
 	}
@@ -461,7 +462,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 		char *encoded_msg;
 		uint32_t len = encode_message(msg, &encoded_msg);
 		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-		runicast_send(&runicast, &(parent.addr_via), 1);
+		runicast_send(&runicast, &(parent->addr_via), 1);
 		free_message(msg);
 		free(encoded_msg);
 	} else if (data_aggregate_msg == NULL) {
@@ -473,7 +474,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 		char *encoded_msg;
 		uint32_t len = encode_message(data_aggregate_msg, &encoded_msg);
 		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-		runicast_send(&runicast, &(parent.addr_via), 1);
+		runicast_send(&runicast, &(parent->addr_via), 1);
 		free_message(data_aggregate_msg);
 		free(encoded_msg);
 		data_aggregate_msg = msg;
@@ -500,24 +501,25 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	decode_message(&decoded_msg, encoded_msg, packetbuf_datalen());
 	
 	switch (decoded_msg->header->msg_type) {
-		case TREE_INFORMATION_REQUEST:
+		case TREE_INFORMATION_REQUEST:;
+			struct msg_tree_request_payload *payload_info_req = (struct msg_tree_request_payload *) decoded_msg->payload;
 			// If the tree needs rebuilding
-			if ((decoded_msg->payload->request_attributes & 0x1) == 0x1) {
-				if (decoded_msg->payload->tree_version > tree_version || (tree_stable && decoded_msg->payload->tree_version == tree_version)) {
+			if ((payload_info_req->request_attributes & 0x1) == 0x1) {
+				if (payload_info_req->tree_version > tree_version || (tree_stable && payload_info_req->tree_version == tree_version)) {
 					tree_stable = 0;
 					// Broadcast TREE_INFORMATION_REQUEST message to destroy the tree
 					packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
 					broadcast_send(&broadcast);
 				}
 			} else {
-				if (parent != NULL && decoded_msg->payload->tree_version <= tree_version) {
+				if (parent != NULL && payload_info_req->tree_version <= tree_version) {
 					// Send TREE_ADVERTISEMENT response
 					send_runicast_msg(TREE_ADVERTISEMENT, from);
 				}
 			}
 			break;
 		case TREE_ADVERTISEMENT:
-			handle_tree_advertisement_msg(decoded_msg);
+			handle_tree_advertisement_msg(decoded_msg, from);
 			free_message(decoded_msg);
 			break;
 		default:
@@ -537,41 +539,44 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 	decode_message(&decoded_msg, encoded_msg, packetbuf_datalen());
 
 	switch (decoded_msg->header->msg_type) {
-		case DESTINATION_ADVERTISEMENT:
+		case DESTINATION_ADVERTISEMENT:;
+			struct msg_dest_ad_payload *payload_dest_ad = (struct msg_dest_ad_payload *) decoded_msg->payload;
 			// Discard if version < local version
-			if (decoded_msg->payload->tree_version >= tree_version) {
+			if (payload_dest_ad->tree_version >= tree_version) {
 				// Add to list of childs (or update)
-				add_node(&childs, from, decoded_msg->payload->source_id, 0);
+				add_node(&childs, from, payload_dest_ad->source_id, 0);
 				// Forward message to parent
 				packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
-				runicast_send(&runicast, &(parent.addr_via), 1);
+				runicast_send(&runicast, &(parent->addr_via), 1);
 				free_message(decoded_msg);
 			}
 			break;
 		case SENSOR_DATA:
 			handle_sensor_data_msg(decoded_msg);
 			break;
-		case SENSOR_CONTROL:
+		case SENSOR_CONTROL:;
+			struct msg_control_payload *payload_ctrl = (struct msg_control_payload *) decoded_msg->payload;
 			// Check if message is destined to this sensor
-			if (my_id == decoded_msg->payload->destination_id) {
+			if (my_id == payload_ctrl->destination_id) {
 				// Adapt sensor setting (each control message must contain all settings)
-				send_data = decoded_msg->payload->command & 0x1;
-				send_periodically = (decoded_msg->payload->command & 0x2) >> 1;
+				send_data = payload_ctrl->command & 0x1;
+				send_periodically = (payload_ctrl->command & 0x2) >> 1;
 
 			} else {
-				struct node* child = get_node(childs, decoded_msg->payload->destination_id);
+				struct node* child = get_node(childs, payload_ctrl->destination_id);
 				if (child != NULL) {
 					// Forward control message to child
-					packetbuf_copyfrom(msg, packetbuf_datalen());
-					runicast_send(&runicast, &(child.addr_via), 1);
+					packetbuf_copyfrom(decoded_msg, packetbuf_datalen());
+					runicast_send(&runicast, &(child->addr_via), 1);
 				}
 			}
 			free_message(decoded_msg);
 			break;
 		case TREE_ADVERTISEMENT:
-			handle_tree_advertisement_msg(decoded_msg);
+			handle_tree_advertisement_msg(decoded_msg, from);
 			free_message(decoded_msg);
 		default:
+			break;
 	}
 }
 
@@ -641,22 +646,23 @@ PROCESS_THREAD(sensor_process, ev, data)
 		// TODO Generate data, create message
 		struct message *msg = (struct message *) malloc(sizeof(struct message));	
 		get_msg(msg, SENSOR_DATA);
-		msg->payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
-		msg->payload->data_header =  (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
-		msg->payload->data_header->source_id = my_id;
-		msg->payload->data_header->subject_id = 42;
-		msg->payload->data_header->length = sizeof(int);
+		struct msg_data_payload *payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+		payload->data_header =  (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
+		payload->data_header->source_id = my_id;
+		payload->data_header->subject_id = 42;
+		payload->data_header->length = sizeof(int);
 		int *data = (int *) malloc(sizeof(int));
 		*data = 69; // Sensor value
-		msg->payload->data = data;
+		payload->data = data;
 		msg->header->length = sizeof(struct msg_data_payload_h) + sizeof(int);
+		msg->payload = payload;
 
 		// Send data
 		handle_sensor_data_msg(msg);
 
 		// Send DESTINATION_ADVERTISEMENT to indicate that this node is still up (every 120 seconds)
 		if (iter % 4 == 0) {
-			send_runicast_msg(TREE_ADVERTISEMENT, &(parent.addr_via));
+			send_runicast_msg(TREE_ADVERTISEMENT, &(parent->addr_via));
 		}
 	}
 
