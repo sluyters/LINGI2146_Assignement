@@ -8,12 +8,13 @@
 
 #include <time.h>
 #include <string.h>
+#include <stdlib.h>
 
-#include "message.h"
+//#include "message.h"
 
 //#define DEBUG DEBUG_PRINT
 
-#include "net/rime/rime.h"	
+#include "net/rime.h"	
 
 /*-----------------------------------------------------------------------------*/
 /* Configuration values */
@@ -29,6 +30,62 @@ struct broadcast_conn broadcast;
 int send_data = 0; // By default, don't send data
 int send_periodically = 0; // By default, send data only when there is a change (not periodically)
 
+/*-------------------------------------------------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------*/
+/* Structure of the messages */
+enum {
+	DESTINATION_ADVERTISEMENT, 
+	TREE_ADVERTISEMENT, 
+	TREE_INFORMATION_REQUEST,
+	SENSOR_DATA,
+	SENSOR_CONTROL
+};
+
+// I think there is a better way to do this
+struct msg_header {
+	uint8_t version;	// Version of the protocol (less bits ?)
+	uint8_t msg_type;	// Type of the message
+	uint16_t length;	// Length of the payload
+};
+
+struct msg_dest_ad_payload {
+	uint8_t tree_version;
+	uint8_t source_id;
+};
+
+struct msg_tree_ad_payload {
+	uint8_t tree_version;
+	uint8_t source_id;
+	uint8_t n_hops;
+};
+
+struct msg_tree_request_payload {
+	uint8_t tree_version;
+	uint8_t request_attributes;		// if request_attributes & 0x1 == 1 => tree_broken
+};
+
+struct msg_data_payload_h {
+	uint8_t source_id;
+	uint8_t subject_id;
+	uint8_t length;
+};
+
+struct msg_data_payload {
+	struct msg_data_payload_h *data_header;
+	void *data;
+	struct msg_data_payload *next;
+};
+
+struct msg_control_payload {
+	uint8_t destination_id;
+	uint8_t command;
+};
+
+struct message {
+	struct msg_header *header;
+	void *payload;
+};
+
 /*-----------------------------------------------------------------------------*/
 /* Save parent + child nodes */
 struct node {
@@ -37,7 +94,7 @@ struct node {
 	uint8_t node_id;
 	uint8_t n_hops;
 	int timestamp;
-}
+};
 
 struct node *parent = NULL;
 struct node *childs = NULL;
@@ -56,6 +113,119 @@ struct ctimer aggregate_ctimer;
 PROCESS(my_process, "My process");
 AUTOSTART_PROCESSES(&my_process);
 
+/*---------------------------------------------------------------------------------------------------------------------------*/
+static uint32_t encode_message(struct message *decoded_msg, char **encoded_msg) {
+	uint32_t length = decoded_msg->header->length + sizeof(struct msg_header);
+	// Allocate memory for encoded message
+	*encoded_msg = (char *) malloc(length); // TODO make allocation outside of the function ?
+	int offset = 0;
+	// Encode the header
+	memcpy(*encoded_msg, (void *) decoded_msg->header, sizeof(struct msg_header));
+	offset += sizeof(struct msg_header);
+	// Encode the payload
+	switch (decoded_msg->header->msg_type) {
+		case SENSOR_DATA:;
+			// Copy all payload data
+			struct msg_data_payload *current = (struct msg_data_payload *) decoded_msg->payload;
+			while (current != NULL) {
+				memcpy(*encoded_msg + offset, (void *) current->data_header, sizeof(struct msg_data_payload_h));
+				offset += sizeof(struct msg_data_payload_h);
+				memcpy(*encoded_msg + offset, (void *) current->data, current->data_header->length);
+				offset += current->data_header->length;
+				current = current->next;
+			}
+			break;
+		default:
+			memcpy(*encoded_msg + offset, (void *) decoded_msg->payload, decoded_msg->header->length);	
+	}
+	return length;
+}
+
+static void decode_message(struct message **decoded_msg, char *encoded_msg, uint16_t msg_len) {
+	int offset = 0;
+	// Allocate memory for decoded message
+	struct message *new_msg = (struct message *) malloc(sizeof(struct message));	// TODO make allocation outside of the function
+	new_msg->header = (struct msg_header *) malloc(sizeof(struct msg_header));
+	// Decode the header
+	memcpy(new_msg->header, (void *) encoded_msg, sizeof(struct msg_header));
+	offset += sizeof(struct msg_header);
+	new_msg->header->length = msg_len - offset;
+	// Decode the payload
+	switch (new_msg->header->msg_type) {
+		case DESTINATION_ADVERTISEMENT:
+			struct msg_dest_ad_payload *payload = (struct msg_dest_ad_payload *) malloc(new_msg->header->length);
+			memcpy(payload, (void *) encoded_msg + offset, new_msg->header->length);
+			new_msg->payload = payload;
+			break; 
+		case TREE_ADVERTISEMENT:
+			struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) malloc(new_msg->header->length);
+			memcpy(payload, (void *) encoded_msg + offset, new_msg->header->length);
+			new_msg->payload = payload;
+			break; 
+		case TREE_INFORMATION_REQUEST:
+			struct msg_tree_ad_payload *payload = (struct msg_tree_request_payload *) malloc(new_msg->header->length);
+			memcpy(payload, (void *) encoded_msg + offset, new_msg->header->length);
+			new_msg->payload = payload;
+			break;
+		case SENSOR_DATA:
+			struct msg_data_payload *payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+			// Copy data header
+			payload->data_header = (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
+			memcpy(payload->data_header, (void *) encoded_msg + offset, sizeof(struct msg_data_payload_h));
+			offset += sizeof(struct msg_data_payload_h);
+			// Copy data payload
+			payload.data = (void *) malloc(payload.data_header->length);
+			memcpy(payload->data, (void *) encoded_msg + offset, payload->data_header->length);
+			offset += payload->data_header->length;
+			new_msg->payload = payload;
+
+			while (offset < msg_len) {
+				// Set next data payload
+				payload->next = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+				payload = payload->next;
+				// Copy data header
+				payload->data_header = (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
+				memcpy(payload->data_header, (void *) encoded_msg + offset, sizeof(struct msg_data_payload_h));
+				offset += sizeof(struct msg_data_payload_h);
+				// Copy data payload
+				payload.data = (void *) malloc(payload.data_header.length);
+				memcpy(payload->data, (void *) encoded_msg + offset, payload.data_header.length);
+				offset += payload.data_header.length;
+			}
+			payload.next = NULL;
+			break;
+		case SENSOR_CONTROL:
+			struct msg_control_payload *payload = (struct msg_control_payload *) malloc(new_msg.header.length);
+			memcpy(payload, (void *) encoded_msg + offset, sizeof(new_msg.header.length));
+			new_msg.payload = payload;
+			break;
+		default:	
+			break;
+	}
+    *decoded_msg = new_msg;
+}
+
+static void free_message(struct message *msg) {
+	free(msg.header);
+	if (msg.payload != NULL) {
+		if (msg.header.msg_type == SENSOR_DATA) {
+			// Free all aggregated data
+			struct msg_data_payload *current = msg.payload;
+			struct msg_data_payload *previous;
+			while (current != NULL) {
+				free(current->data);
+				free(current->data_header);
+				previous = current;
+				current = current.next;
+				free(previous);
+			}
+		} else {
+			free(msg.payload);
+		}
+	}
+	free(msg);
+}
+
 /*-----------------------------------------------------------------------------*/
 /* Helper functions */
 
@@ -73,10 +243,10 @@ static void send_aggregate_msg(void *ptr) {
 /**
  * Adds the new node to the @nodes list, or update its data if it is already present
  */
-static void add_node(struct node **nodes, rimeaddr_t *addr_via, uint8_t node_id, uint8_t n_hops) {
+static void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t node_id, uint8_t n_hops) {
 	if (*nodes == NULL) {
 		// If the list is empty, create a new node
-		*nodes = (node *) malloc(sizeof(struct node));
+		*nodes = (struct node *) malloc(sizeof(struct node));
 		(*nodes).addr_via = *addr_via;			// Not sure
 		(*nodes).node_id = node_id;
 		(*nodes).next = NULL;
@@ -109,7 +279,7 @@ static void add_node(struct node **nodes, rimeaddr_t *addr_via, uint8_t node_id,
 			}
 		}
 		// Add new node
-		struct node *new_node = (node *) malloc(sizeof(struct node));
+		struct node *new_node = (struct node *) malloc(sizeof(struct node));
 		new_node.addr_via = *addr_via;			// Not sure
 		new_node.node_id = node_id;
 		new_node.next = NULL;
@@ -219,6 +389,7 @@ static void get_msg(struct message *msg, int msg_type) {
 			msg.header.length = sizeof(struct msg_tree_request_payload);
 			break;
 		default:
+			break;
 	}
 }
 
@@ -239,7 +410,7 @@ static void send_broadcast_msg(int msg_type) {
 /**
  * Sends a simple unicast message of type @msg_type to @addr_dest
  */ 
-static void send_runicast_msg(int msg_type, rimeaddr_t *addr_dest) {
+static void send_runicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
 	struct message *msg = (struct message *) malloc(sizeof(struct message));
 	char *encoded_msg;	
 	get_msg(msg, msg_type);
@@ -250,6 +421,7 @@ static void send_runicast_msg(int msg_type, rimeaddr_t *addr_dest) {
 	free_message(msg);
 }
 
+// TODO from undeclared (line 433)
 static void handle_tree_advertisement_msg(struct message *msg) {
 	// Check version, if version >= local version, process the TREE_ADVERTISEMENT message
 	if (msg.payload.tree_version >= tree_version || tree_version - msg.payload.tree_version > 245) {
@@ -307,7 +479,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 		// Add to aggregated message payload
 		struct msg_data_payload *current = data_aggregate_msg.payload;
 		while (current.next != NULL) {
-			current = current.next
+			current = current.next;
 		}
 		current.next = msg.payload;
 		data_aggregate_msg.header.length += msg.header.length;
@@ -343,9 +515,10 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			break;
 		case TREE_ADVERTISEMENT:
 			handle_tree_advertisement_msg(decoded_msg);
-			free_message(decoded_msg)
+			free_message(decoded_msg);
 			break;
-		default;
+		default:
+			break;
 	}
 }
 
@@ -367,7 +540,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 				// Add to list of childs (or update)
 				add_node(&childs, from, decoded_msg.payload.source_id, 0);
 				// Forward message to parent
-				packetbuf_copyfrom(msg, packetbuf_datalen());
+				packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
 				runicast_send(&runicast, &(parent.addr_via), 1);
 				free_message(decoded_msg);
 			}
@@ -394,13 +567,13 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 			break;
 		case TREE_ADVERTISEMENT:
 			handle_tree_advertisement_msg(decoded_msg);
-			free_message(decoded_msg)
+			free_message(decoded_msg);
 		default:
 	}
 }
 
 // Set the function to be called when a broadcast message is received
-static const struct runicast_callbacks runicast_callbacks = {runicast_recv}
+static const struct runicast_callbacks runicast_callbacks = {runicast_recv};
 
 /*
 static void exit_handler(struct *broadcast_conn bc, struct *runicast_conn rc) {
@@ -419,7 +592,7 @@ PROCESS_THREAD(my_process, ev, data)
 
 	PROCESS_BEGIN();
 
-	unicast_open(&runicast, 146, &runicast_callbacks);
+	runicast_open(&runicast, 146, &runicast_callbacks);
 
 	while (1) {
 		// Every 25 to 35 seconds

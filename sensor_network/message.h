@@ -7,7 +7,7 @@
 
 //#define DEBUG DEBUG_PRINT
 
-#include "net/rime/rime.h"	
+#include "net/rime.h"	
 
 /*-----------------------------------------------------------------------------*/
 /* Structure of the messages */
