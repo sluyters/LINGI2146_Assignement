@@ -6,9 +6,9 @@ import paho.mqtt.client as mqtt
 import subprocess
 
 topicdict = {
-    0x0: "temperature"
-    0x1: "swagdensity"
-    0x2: "whatAmIDoingWithMyLife"
+    0: "temperature",
+    1: "swagdensity",
+    2: "whatAmIDoingWithMyLife"
 }
 
 # The callback for when the client receives a CONNACK response from the server.
@@ -22,15 +22,16 @@ def handle_cmd():
         # Send command
 
 def sensors_interface(mqttc):
-    # Start serialdump tool
-    p = subprocess.Popen("../../tools/sky/serialdump-linux -b115200 /dev/ttyUSB0 ", input = subprocess.PIPE, output = subprocess.PIPE)
-    while True:
-        stdoutdata, stderrdata = p.communicate()
-        if stdoutdata != None:
-            # Modify condition + do something
-            topic = 
-            msg_content = 
-            mqttc.publish(topic, payload=msg_content, qos=0, retain=False)
+    # Start serialdump tool, read each line
+    with subprocess.Popen(["../../tools/sky/serialdump-linux", "-b115200", "/dev/ttyUSB0"], stdout=subprocess.PIPE, stdin=subprocess.PIPE, bufsize=1, universal_newlines=True) as p:
+        for line in p.stdout:
+            print(line, end='')
+            data = line.split()
+            if data[0] == "PUBLISH":
+                sensor_id = int(data[1])
+                subject_id = int(data[2])
+                msg_content = data[3]
+                mqttc.publish(topicdict(subject_id), payload=msg_content, qos=0, retain=False)
     p.terminate()
 
 def main():
