@@ -174,7 +174,7 @@ static void decode_message(struct message **decoded_msg, char *encoded_msg, uint
 			memcpy(payload->data_header, (void *) encoded_msg + offset, sizeof(struct msg_data_payload_h));
 			offset += sizeof(struct msg_data_payload_h);
 			// Copy data payload
-			payload.data = (void *) malloc(payload.data_header->length);
+			payload->data = (void *) malloc(payload->data_header->length);
 			memcpy(payload->data, (void *) encoded_msg + offset, payload->data_header->length);
 			offset += payload->data_header->length;
 			new_msg->payload = payload;
@@ -188,16 +188,16 @@ static void decode_message(struct message **decoded_msg, char *encoded_msg, uint
 				memcpy(payload->data_header, (void *) encoded_msg + offset, sizeof(struct msg_data_payload_h));
 				offset += sizeof(struct msg_data_payload_h);
 				// Copy data payload
-				payload.data = (void *) malloc(payload.data_header.length);
-				memcpy(payload->data, (void *) encoded_msg + offset, payload.data_header.length);
-				offset += payload.data_header.length;
+				payload->data = (void *) malloc(payload->data_header->length);
+				memcpy(payload->data, (void *) encoded_msg + offset, payload->data_header->length);
+				offset += payload->data_header->length;
 			}
-			payload.next = NULL;
+			payload->next = NULL;
 			break;
 		case SENSOR_CONTROL:
-			struct msg_control_payload *payload = (struct msg_control_payload *) malloc(new_msg.header.length);
-			memcpy(payload, (void *) encoded_msg + offset, sizeof(new_msg.header.length));
-			new_msg.payload = payload;
+			struct msg_control_payload *payload = (struct msg_control_payload *) malloc(new_msg->header->length);
+			memcpy(payload, (void *) encoded_msg + offset, sizeof(new_msg->header->length));
+			new_msg->payload = payload;
 			break;
 		default:	
 			break;
@@ -206,21 +206,21 @@ static void decode_message(struct message **decoded_msg, char *encoded_msg, uint
 }
 
 static void free_message(struct message *msg) {
-	free(msg.header);
-	if (msg.payload != NULL) {
-		if (msg.header.msg_type == SENSOR_DATA) {
+	free(msg->header);
+	if (msg->payload != NULL) {
+		if (msg->header->msg_type == SENSOR_DATA) {
 			// Free all aggregated data
-			struct msg_data_payload *current = msg.payload;
+			struct msg_data_payload *current = msg->payload;
 			struct msg_data_payload *previous;
 			while (current != NULL) {
 				free(current->data);
 				free(current->data_header);
 				previous = current;
-				current = current.next;
+				current = current->next;
 				free(previous);
 			}
 		} else {
-			free(msg.payload);
+			free(msg->payload);
 		}
 	}
 	free(msg);
@@ -247,44 +247,44 @@ static void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t no
 	if (*nodes == NULL) {
 		// If the list is empty, create a new node
 		*nodes = (struct node *) malloc(sizeof(struct node));
-		(*nodes).addr_via = *addr_via;			// Not sure
-		(*nodes).node_id = node_id;
-		(*nodes).next = NULL;
-		(*nodes).n_hops = n_hops;
-		(*nodes).timestamp = (int) time(NULL);
+		(*nodes)->addr_via = *addr_via;			// Not sure
+		(*nodes)->node_id = node_id;
+		(*nodes)->next = NULL;
+		(*nodes)->n_hops = n_hops;
+		(*nodes)->timestamp = (int) time(NULL);
 	} else if (*nodes.node_id == node_id && *nodes.next == NULL) {
 		// If the first node matches node_id and there is no other node, update it
-		(*nodes).addr_via = *addr_via;			// Not sure
-		(*nodes).n_hops = n_hops;
-		(*nodes).timestamp = (int) time(NULL);
+		(*nodes)->addr_via = *addr_via;			// Not sure
+		(*nodes)->n_hops = n_hops;
+		(*nodes)->timestamp = (int) time(NULL);
 	} else {
 		// If the list is not empty, check each node until we reach the last node. If a match is found, remove it and add it to the end
 		struct node *current = *nodes;
 		struct node *previous;
 		// If the first node matches node_id
-		if (current.node_id == node_id) {
-			*nodes = current.next;
+		if (current->node_id == node_id) {
+			*nodes = current->next;
 			free(current);
 			current = *nodes;
 		}
 		while (current != NULL) {
-			if (current.node_id == node_id) {
+			if (current->node_id == node_id) {
 				// Remove this node, it will be added at the end of the queue later
-				previous.next = current.next;
+				previous->next = current->next;
 				free(current);
-				current = previous.next;
+				current = previous->next;
 			} else {
 				previous = current;
-				current = current.next;
+				current = current->next;
 			}
 		}
 		// Add new node
 		struct node *new_node = (struct node *) malloc(sizeof(struct node));
-		new_node.addr_via = *addr_via;			// Not sure
-		new_node.node_id = node_id;
-		new_node.next = NULL;
-		new_node.n_hops = n_hops;
-		new_node.timestamp = (int) time(NULL);
+		new_node->addr_via = *addr_via;			// Not sure
+		new_node->node_id = node_id;
+		new_node->next = NULL;
+		new_node->n_hops = n_hops;
+		new_node->timestamp = (int) time(NULL);
 	}
 }
 
@@ -293,23 +293,23 @@ static void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t no
  */
 static void remove_node(struct node **nodes, uint8_t node_id) {
 	if (*nodes != NULL) {
-		if ((*nodes).node_id == node_id) {
+		if ((*nodes)->node_id == node_id) {
 			// The node to delete is the first node
 			struct node *deleted_node = *nodes;
-			*nodes = (*nodes).next;
+			*nodes = (*nodes)->next;
 			free(deleted_node);
 		} else {
-			struct node *current = (*nodes).next;
+			struct node *current = (*nodes)->next;
 			struct node *previous = *nodes;
 			while (current != NULL) {
-				if (current.node_id == node_id) {
+				if (current->node_id == node_id) {
 					// Delete node
-					previous.next = current.next;
+					previous->next = current->next;
 					free(current);
 					return;	
 				}
 				previous = current;
-				current = current.next;
+				current = current->next;
 			}
 		}
 	}
@@ -321,9 +321,9 @@ static void remove_node(struct node **nodes, uint8_t node_id) {
 static void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
 	int now = (int) time(NULL);
 	struct node *deleted_node;
-	while (*nodes != NULL && (now - (*nodes).timestamp > max_elapsed_secs)) {
+	while (*nodes != NULL && (now - (*nodes)->timestamp > max_elapsed_secs)) {
 		deleted_node = *nodes;
-		*nodes = (*nodes).next;
+		*nodes = (*nodes)->next;
 		free(deleted_node);
 	}
 }
@@ -334,10 +334,10 @@ static void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
 static node *get_node(struct node *nodes, uint8_t node_id) {
 	struct node *current = nodes;
 	while (current != NULL) {
-		if (current.node_id == node_id) {
+		if (current->node_id == node_id) {
 			return current;
 		}
-		current = current.next;
+		current = current->next;
 	}
 	return NULL;
 }
@@ -348,7 +348,7 @@ static void send_to_childs(void *msg, int length) {
 	struct node *current = childs;
 	while (current != NULL) {
 		packetbuf_copyfrom(encoded_msg, length);	// Put data inside the packet
-		runicast_send(&runicast, &(current.addr_via), 1); 
+		runicast_send(&runicast, &(current->addr_via), 1); 
 	}
 }
 */
@@ -357,36 +357,36 @@ static void send_to_childs(void *msg, int length) {
  * Initializes a simple message of type @msg_type
  */
 static void get_msg(struct message *msg, int msg_type) {
-	msg.header = (struct msg_header *) malloc(sizeof(struct msg_header));
-	msg.header.version = version;
-	msg.header.type = msg_type;
+	msg->header = (struct msg_header *) malloc(sizeof(struct msg_header));
+	msg->header->version = version;
+	msg->header->type = msg_type;
 	switch (msg_type) {
 		case SENSOR_DATA:
-			msg.payload = NULL;
-			msg.header.length = 0;
+			msg->payload = NULL;
+			msg->header->length = 0;
 			break;
 		case TREE_ADVERTISEMENT:
-			msg.payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
-			msg.payload.n_hops = parent.n_hops;
-			msg.payload.source_id = my_id;
-			msg.payload.tree_version = tree_version;
-			msg.header.length = sizeof(struct msg_tree_ad_payload);
+			msg->payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
+			msg->payload->n_hops = parent.n_hops;
+			msg->payload->source_id = my_id;
+			msg->payload->tree_version = tree_version;
+			msg->header->length = sizeof(struct msg_tree_ad_payload);
 			break;
 		case DESTINATION_ADVERTISEMENT:
-			msg.payload = (struct msg_dest_ad_payload *) malloc(sizeof(struct msg_dest_ad_payload));
-			msg.payload.source_id = my_id;
-			msg.payload.tree_version = tree_version;
-			msg.header.length = sizeof(struct msg_dest_ad_payload);
+			msg->payload = (struct msg_dest_ad_payload *) malloc(sizeof(struct msg_dest_ad_payload));
+			msg->payload->source_id = my_id;
+			msg->payload->tree_version = tree_version;
+			msg->header->length = sizeof(struct msg_dest_ad_payload);
 			break;
 		case TREE_INFORMATION_REQUEST:
-			msg.payload = (struct msg_tree_request_payload *) malloc(sizeof(struct msg_tree_request_payload));
-			msg.payload.tree_version = tree_version;
+			msg->payload = (struct msg_tree_request_payload *) malloc(sizeof(struct msg_tree_request_payload));
+			msg->payload->tree_version = tree_version;
 			if (tree_stable) {
-				msg.payload.request_attributes = 0x0;
+				msg->payload->request_attributes = 0x0;
 			} else {
-				msg.payload.request_attributes = 0x1;
+				msg->payload->request_attributes = 0x1;
 			}
-			msg.header.length = sizeof(struct msg_tree_request_payload);
+			msg->header->length = sizeof(struct msg_tree_request_payload);
 			break;
 		default:
 			break;
@@ -424,28 +424,28 @@ static void send_runicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
 // TODO from undeclared (line 433)
 static void handle_tree_advertisement_msg(struct message *msg) {
 	// Check version, if version >= local version, process the TREE_ADVERTISEMENT message
-	if (msg.payload.tree_version >= tree_version || tree_version - msg.payload.tree_version > 245) {
+	if (msg->payload->tree_version >= tree_version || tree_version - msg->payload->tree_version > 245) {
 		// Check if new neighbor is better than current parent (automatically better if tree version is greater)
-		if ((msg.payload.tree_version > tree_version || tree_version - msg.payload.tree_version > 245) || ((parent == NULL || msg.payload.n_hops < parent.n_hops) && get_node(childs, msg.payload.source_id) == NULL)) {
+		if ((msg->payload->tree_version > tree_version || tree_version - msg->payload->tree_version > 245) || ((parent == NULL || msg->payload->n_hops < parent.n_hops) && get_node(childs, msg->payload->source_id) == NULL)) {
 			if (parent != NULL) {
 				remove_node(&parent, parent.node_id);
 			}
 			// Add the new parent
-			add_node(&parent, from, msg.payload.source_id, msg.payload.n_hops + 1);
+			add_node(&parent, from, msg->payload->source_id, msg->payload->n_hops + 1);
 			// Send a DESTINATION_ADVERTISEMENT message to the new parent node
 			send_runicast_msg(DESTINATION_ADVERTISEMENT, from);
 			// Broadcast the new tree
 			send_broadcast_msg(TREE_ADVERTISEMENT);
 			// Update tree version + consider the tree as stable
-			tree_version = msg.payload.tree_version;
+			tree_version = msg->payload->tree_version;
 			tree_stable = 1;
-		} else if (parent.node_id == msg.payload.source_id)	{
+		} else if (parent.node_id == msg->payload->source_id)	{
 			// Update the informations of the parent
-			add_node(&parent, from, msg.payload.source_id, msg.payload.n_hops + 1);
+			add_node(&parent, from, msg->payload->source_id, msg->payload->n_hops + 1);
 			// Broadcast the new tree
 			send_broadcast_msg(TREE_ADVERTISEMENT);
 			// Update tree version + consider the tree as stable
-			tree_version = msg.payload.tree_version;
+			tree_version = msg->payload->tree_version;
 			tree_stable = 1;
 		}
 	}
@@ -465,7 +465,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 		// Store this message while waiting for other messages to aggregate + set timer
 		data_aggregate_msg = msg;
 		ctimer_set(&aggregate_ctimer, CLOCK_SECOND * 30, send_aggregate_msg, NULL);
-	} else if (data_aggregate_msg.header.length + msg.header.length > 128) {
+	} else if (data_aggregate_msg->header->length + msg->header->length > 128) {
 		// If too many messages already aggregated, send old messages + save this one as new aggregated message
 		char *encoded_msg;
 		uint32_t len = encode_message(data_aggregate_msg, &encoded_msg);
@@ -477,13 +477,13 @@ static void handle_sensor_data_msg(struct message *msg) {
 		ctimer_reset(&aggregate_ctimer);
 	} else {
 		// Add to aggregated message payload
-		struct msg_data_payload *current = data_aggregate_msg.payload;
-		while (current.next != NULL) {
-			current = current.next;
+		struct msg_data_payload *current = data_aggregate_msg->payload;
+		while (current->next != NULL) {
+			current = current->next;
 		}
-		current.next = msg.payload;
-		data_aggregate_msg.header.length += msg.header.length;
-		msg.payload = NULL; // Avoid conflits when freeing the message
+		current->next = msg->payload;
+		data_aggregate_msg->header->length += msg->header->length;
+		msg->payload = NULL; // Avoid conflits when freeing the message
 		free_message(msg);
 	}
 }
@@ -496,18 +496,18 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	struct message *decoded_msg;
 	decode_message(&decoded_msg, encoded_msg, packetbuf_datalen());
 	
-	switch (decoded_msg.header.msg_type) {
+	switch (decoded_msg->header->msg_type) {
 		case TREE_INFORMATION_REQUEST:
 			// If the tree needs rebuilding
-			if ((decoded_msg.payload.request_attributes & 0x1) == 0x1) {
-				if (decoded_msg.payload.tree_version > tree_version || (tree_stable && decoded_msg.payload.tree_version == tree_version)) {
+			if ((decoded_msg->payload->request_attributes & 0x1) == 0x1) {
+				if (decoded_msg->payload->tree_version > tree_version || (tree_stable && decoded_msg->payload->tree_version == tree_version)) {
 					tree_stable = 0;
 					// Broadcast TREE_INFORMATION_REQUEST message to destroy the tree
 					packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
 					broadcast_send(&broadcast);
 				}
 			} else {
-				if (parent != NULL && decoded_msg.payload.tree_version <= tree_version) {
+				if (parent != NULL && decoded_msg->payload->tree_version <= tree_version) {
 					// Send TREE_ADVERTISEMENT response
 					send_runicast_msg(TREE_ADVERTISEMENT, from);
 				}
@@ -533,12 +533,12 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 	struct message *decoded_msg;
 	decode_message(&decoded_msg, encoded_msg, packetbuf_datalen());
 
-	switch (decoded_msg.header.msg_type) {
+	switch (decoded_msg->header->msg_type) {
 		case DESTINATION_ADVERTISEMENT:
 			// Discard if version < local version
-			if (decoded_msg.payload.tree_version >= tree_version) {
+			if (decoded_msg->payload->tree_version >= tree_version) {
 				// Add to list of childs (or update)
-				add_node(&childs, from, decoded_msg.payload.source_id, 0);
+				add_node(&childs, from, decoded_msg->payload->source_id, 0);
 				// Forward message to parent
 				packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
 				runicast_send(&runicast, &(parent.addr_via), 1);
@@ -550,13 +550,13 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 			break;
 		case SENSOR_CONTROL:
 			// Check if message is destined to this sensor
-			if (my_id == decoded_msg.payload.destination_id) {
+			if (my_id == decoded_msg->payload->destination_id) {
 				// Adapt sensor setting (each control message must contain all settings)
-				send_data = decoded_msg.payload.command & 0x1;
-				send_periodically = (decoded_msg.payload.command & 0x2) >> 1;
+				send_data = decoded_msg->payload->command & 0x1;
+				send_periodically = (decoded_msg->payload->command & 0x2) >> 1;
 
 			} else {
-				struct node* child = get_node(childs, decoded_msg.payload.destination_id);
+				struct node* child = get_node(childs, decoded_msg->payload->destination_id);
 				if (child != NULL) {
 					// Forward control message to child
 					packetbuf_copyfrom(msg, packetbuf_datalen());
@@ -638,15 +638,15 @@ PROCESS_THREAD(sensor_process, ev, data)
 		// TODO Generate data, create message
 		struct message *msg = (struct message *) malloc(sizeof(struct message));	
 		get_msg(msg, SENSOR_DATA);
-		msg.payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
-		msg.payload.data_header =  (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
-		msg.payload.data_header.source_id = my_id;
-		msg.payload.data_header.subject_id = 42;
-		msg.payload.data_header.length = sizeof(int);
+		msg->payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+		msg->payload->data_header =  (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
+		msg->payload->data_header->source_id = my_id;
+		msg->payload->data_header->subject_id = 42;
+		msg->payload->data_header->length = sizeof(int);
 		int *data = (int *) malloc(sizeof(int));
 		*data = 69; // Sensor value
-		msg.payload.data = data;
-		msg.header.length = sizeof(struct msg_data_payload_h) + sizeof(int);
+		msg->payload->data = data;
+		msg->header->length = sizeof(struct msg_data_payload_h) + sizeof(int);
 
 		// Send data
 		handle_sensor_data_msg(msg);
