@@ -25,7 +25,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	switch (decoded_msg.header.msg_type) {
 		case TREE_INFORMATION_REQUEST:
 			// If the tree needs rebuilding, increment the tree version 
-			if (decoded_msg.payload.request_attributes & 0x1 == 0x1 && decoded_msg.payload.tree_version == tree_version) {
+			if ((decoded_msg.payload.request_attributes & 0x1) == 0x1 && decoded_msg.payload.tree_version == tree_version) {
 				tree_version++;
 			}
 				
