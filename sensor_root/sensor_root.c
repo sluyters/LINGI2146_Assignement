@@ -58,7 +58,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 
 	switch (decoded_msg.header.msg_type) {
 		case DESTINATION_ADVERTISEMENT:
-			// TODO
+			printf("DEST_AD %d\n", decoded_msg.payload.source_id);
 			break;
 		case SENSOR_DATA:
 			// Send data to the gateway.
@@ -71,8 +71,9 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 			break;
 		default:
 	}
-	// TODO free data
+
+	free_message(decoded_msg);
 }
 
 // Set the function to be called when a broadcast message is received
-static const struct runicast_callbacks rc = {runicast_recv}
+static const struct runicast_callbacks rc = {runicast_recv};
