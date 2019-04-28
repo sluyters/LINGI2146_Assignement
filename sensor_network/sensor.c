@@ -152,52 +152,52 @@ static void decode_message(struct message **decoded_msg, char *encoded_msg, uint
 	new_msg->header->length = msg_len - offset;
 	// Decode the payload
 	switch (new_msg->header->msg_type) {
-		case DESTINATION_ADVERTISEMENT:
-			struct msg_dest_ad_payload *payload = (struct msg_dest_ad_payload *) malloc(new_msg->header->length);
-			memcpy(payload, (void *) encoded_msg + offset, new_msg->header->length);
-			new_msg->payload = payload;
+		case DESTINATION_ADVERTISEMENT:;
+			struct msg_dest_ad_payload *payload_dest_ad = (struct msg_dest_ad_payload *) malloc(new_msg->header->length);
+			memcpy(payload_dest_ad, (void *) encoded_msg + offset, new_msg->header->length);
+			new_msg->payload = payload_dest_ad;
 			break; 
-		case TREE_ADVERTISEMENT:
-			struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) malloc(new_msg->header->length);
-			memcpy(payload, (void *) encoded_msg + offset, new_msg->header->length);
-			new_msg->payload = payload;
+		case TREE_ADVERTISEMENT:;
+			struct msg_tree_ad_payload *payload_tree_ad = (struct msg_tree_ad_payload *) malloc(new_msg->header->length);
+			memcpy(payload_tree_ad, (void *) encoded_msg + offset, new_msg->header->length);
+			new_msg->payload = payload_tree_ad;
 			break; 
-		case TREE_INFORMATION_REQUEST:
-			struct msg_tree_ad_payload *payload = (struct msg_tree_request_payload *) malloc(new_msg->header->length);
-			memcpy(payload, (void *) encoded_msg + offset, new_msg->header->length);
-			new_msg->payload = payload;
+		case TREE_INFORMATION_REQUEST:;
+			struct msg_tree_request_payload *payload_info_req = (struct msg_tree_request_payload *) malloc(new_msg->header->length);
+			memcpy(payload_info_req, (void *) encoded_msg + offset, new_msg->header->length);
+			new_msg->payload = payload_info_req;
 			break;
-		case SENSOR_DATA:
-			struct msg_data_payload *payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+		case SENSOR_DATA:;
+			struct msg_data_payload *payload_data = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
 			// Copy data header
-			payload->data_header = (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
-			memcpy(payload->data_header, (void *) encoded_msg + offset, sizeof(struct msg_data_payload_h));
+			payload_data->data_header = (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
+			memcpy(payload_data->data_header, (void *) encoded_msg + offset, sizeof(struct msg_data_payload_h));
 			offset += sizeof(struct msg_data_payload_h);
 			// Copy data payload
-			payload->data = (void *) malloc(payload->data_header->length);
-			memcpy(payload->data, (void *) encoded_msg + offset, payload->data_header->length);
-			offset += payload->data_header->length;
-			new_msg->payload = payload;
+			payload_data->data = (void *) malloc(payload_data->data_header->length);
+			memcpy(payload_data->data, (void *) encoded_msg + offset, payload_data->data_header->length);
+			offset += payload_data->data_header->length;
+			new_msg->payload = payload_data;
 
 			while (offset < msg_len) {
 				// Set next data payload
-				payload->next = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
-				payload = payload->next;
+				payload_data->next = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+				payload_data = payload_data->next;
 				// Copy data header
-				payload->data_header = (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
-				memcpy(payload->data_header, (void *) encoded_msg + offset, sizeof(struct msg_data_payload_h));
+				payload_data->data_header = (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
+				memcpy(payload_data->data_header, (void *) encoded_msg + offset, sizeof(struct msg_data_payload_h));
 				offset += sizeof(struct msg_data_payload_h);
 				// Copy data payload
-				payload->data = (void *) malloc(payload->data_header->length);
-				memcpy(payload->data, (void *) encoded_msg + offset, payload->data_header->length);
-				offset += payload->data_header->length;
+				payload_data->data = (void *) malloc(payload_data->data_header->length);
+				memcpy(payload_data->data, (void *) encoded_msg + offset, payload_data->data_header->length);
+				offset += payload_data->data_header->length;
 			}
-			payload->next = NULL;
+			payload_data->next = NULL;
 			break;
-		case SENSOR_CONTROL:
-			struct msg_control_payload *payload = (struct msg_control_payload *) malloc(new_msg->header->length);
-			memcpy(payload, (void *) encoded_msg + offset, sizeof(new_msg->header->length));
-			new_msg->payload = payload;
+		case SENSOR_CONTROL:;
+			struct msg_control_payload *payload_ctrl = (struct msg_control_payload *) malloc(new_msg->header->length);
+			memcpy(payload_ctrl, (void *) encoded_msg + offset, sizeof(new_msg->header->length));
+			new_msg->payload = payload_ctrl;
 			break;
 		default:	
 			break;
@@ -234,7 +234,7 @@ static void send_aggregate_msg(void *ptr) {
 	char *encoded_msg;
 	uint32_t len = encode_message(data_aggregate_msg, &encoded_msg);
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-	runicast_send(&runicast, &(parent.addr_via), 1);
+	runicast_send(&runicast, &(parent->addr_via), 1);
 	free_message(data_aggregate_msg);
 	free(encoded_msg);
 	data_aggregate_msg = NULL;
@@ -252,7 +252,7 @@ static void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t no
 		(*nodes)->next = NULL;
 		(*nodes)->n_hops = n_hops;
 		(*nodes)->timestamp = (int) time(NULL);
-	} else if (*nodes.node_id == node_id && *nodes.next == NULL) {
+	} else if ((*nodes)->node_id == node_id && (*nodes)->next == NULL) {
 		// If the first node matches node_id and there is no other node, update it
 		(*nodes)->addr_via = *addr_via;			// Not sure
 		(*nodes)->n_hops = n_hops;
@@ -331,7 +331,7 @@ static void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
 /**
  * Returns the node corresponding to |node_id if present in @nodes, NULL otherwise
  */
-static node *get_node(struct node *nodes, uint8_t node_id) {
+static struct node *get_node(struct node *nodes, uint8_t node_id) {
 	struct node *current = nodes;
 	while (current != NULL) {
 		if (current->node_id == node_id) {
@@ -359,34 +359,37 @@ static void send_to_childs(void *msg, int length) {
 static void get_msg(struct message *msg, int msg_type) {
 	msg->header = (struct msg_header *) malloc(sizeof(struct msg_header));
 	msg->header->version = version;
-	msg->header->type = msg_type;
+	msg->header->msg_type = msg_type;
 	switch (msg_type) {
-		case SENSOR_DATA:
+		case SENSOR_DATA:;
 			msg->payload = NULL;
 			msg->header->length = 0;
 			break;
-		case TREE_ADVERTISEMENT:
-			msg->payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
-			msg->payload->n_hops = parent.n_hops;
-			msg->payload->source_id = my_id;
-			msg->payload->tree_version = tree_version;
+		case TREE_ADVERTISEMENT:;
+			struct msg_tree_ad_payload *payload_tree_ad = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
+			payload_tree_ad->n_hops = parent->n_hops;
+			payload_tree_ad->source_id = my_id;
+			payload_tree_ad->tree_version = tree_version;
 			msg->header->length = sizeof(struct msg_tree_ad_payload);
+			msg->payload = payload_tree_ad;
 			break;
-		case DESTINATION_ADVERTISEMENT:
-			msg->payload = (struct msg_dest_ad_payload *) malloc(sizeof(struct msg_dest_ad_payload));
-			msg->payload->source_id = my_id;
-			msg->payload->tree_version = tree_version;
+		case DESTINATION_ADVERTISEMENT:;
+			struct msg_dest_ad_payload *payload_dest_ad = (struct msg_dest_ad_payload *) malloc(sizeof(struct msg_dest_ad_payload));
+			payload_dest_ad->source_id = my_id;
+			payload_dest_ad->tree_version = tree_version;
 			msg->header->length = sizeof(struct msg_dest_ad_payload);
+			msg->payload = payload_dest_ad;
 			break;
-		case TREE_INFORMATION_REQUEST:
-			msg->payload = (struct msg_tree_request_payload *) malloc(sizeof(struct msg_tree_request_payload));
-			msg->payload->tree_version = tree_version;
+		case TREE_INFORMATION_REQUEST:;
+			struct msg_tree_request_payload *payload_info_req = (struct msg_tree_request_payload *) malloc(sizeof(struct msg_tree_request_payload));
+			payload_info_req->tree_version = tree_version;
 			if (tree_stable) {
-				msg->payload->request_attributes = 0x0;
+				payload_info_req->request_attributes = 0x0;
 			} else {
-				msg->payload->request_attributes = 0x1;
+				payload_info_req->request_attributes = 0x1;
 			}
 			msg->header->length = sizeof(struct msg_tree_request_payload);
+			msg->payload = payload_info_req;
 			break;
 		default:
 			break;
