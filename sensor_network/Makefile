@@ -1,4 +1,4 @@
-CONTIKI_PROJECT = sensor
+CONTIKI_PROJECT = sensor sensor_root
 all: $(CONTIKI_PROJECT) 
 
 CONTIKI = ../..
