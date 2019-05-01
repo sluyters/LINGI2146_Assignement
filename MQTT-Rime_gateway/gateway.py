@@ -12,8 +12,6 @@ topicdict = {
     2: ("whatAmIDoingWithMyLife", [], [])
 }
 
-
-# TODO If no receiver for this data, send a SENSOR_CONTROL message to the sensor(s) sending this data to disable it
 # TODO Send a SENSOR_CONTROL message to a sensor when a subscriber subscribes to reactivate it
 
 # The callback for when the client receives a CONNACK response from the server.

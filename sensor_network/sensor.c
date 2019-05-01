@@ -11,6 +11,7 @@
 #include <stdlib.h>
 
 #include "message.h"
+#include "node.h"
 
 //#define DEBUG DEBUG_PRINT
 
@@ -32,17 +33,10 @@ int send_periodically = 0; // By default, send data only when there is a change 
 
 /*-----------------------------------------------------------------------------*/
 /* Save parent + child nodes */
-struct node {
-	struct node *next;
-	rimeaddr_t addr_via;
-	uint8_t node_id;
-	uint8_t n_hops;
-	int timestamp;
-};
-
 struct node *parent = NULL;
 struct node *childs = NULL;
 
+/*-----------------------------------------------------------------------------*/
 uint8_t my_id = 42; // TODO Modify this
 uint8_t my_subject_id = 0;
 uint8_t tree_version = 0; 
@@ -71,108 +65,6 @@ static void send_aggregate_msg(void *ptr) {
 	free_message(data_aggregate_msg);
 	free(encoded_msg);
 	data_aggregate_msg = NULL;
-}
-
-/**
- * Adds the new node to the @nodes list, or update its data if it is already present
- */
-static void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t node_id, uint8_t n_hops) {
-	if (*nodes == NULL) {
-		// If the list is empty, create a new node
-		*nodes = (struct node *) malloc(sizeof(struct node));
-		(*nodes)->addr_via = *addr_via;			// Not sure
-		(*nodes)->node_id = node_id;
-		(*nodes)->next = NULL;
-		(*nodes)->n_hops = n_hops;
-		(*nodes)->timestamp = (int) time(NULL);
-	} else if ((*nodes)->node_id == node_id && (*nodes)->next == NULL) {
-		// If the first node matches node_id and there is no other node, update it
-		(*nodes)->addr_via = *addr_via;			// Not sure
-		(*nodes)->n_hops = n_hops;
-		(*nodes)->timestamp = (int) time(NULL);
-	} else {
-		// If the list is not empty, check each node until we reach the last node. If a match is found, remove it and add it to the end
-		struct node *current = *nodes;
-		struct node *previous = current;
-		// If the first node matches node_id
-		if (current->node_id == node_id) {
-			*nodes = current->next;
-			free(current);
-			current = *nodes;
-		}
-		while (current != NULL) {
-			if (current->node_id == node_id) {
-				// Remove this node, it will be added at the end of the queue later
-				previous->next = current->next;
-				free(current);
-				current = previous->next;
-			} else {
-				previous = current;
-				current = current->next;
-			}
-		}
-		// Add new node
-		struct node *new_node = (struct node *) malloc(sizeof(struct node));
-		new_node->addr_via = *addr_via;			// Not sure
-		new_node->node_id = node_id;
-		new_node->next = NULL;
-		new_node->n_hops = n_hops;
-		new_node->timestamp = (int) time(NULL);
-	}
-}
-
-/**
- * Returns the node corresponding to @node_id from @nodes
- */
-static void remove_node(struct node **nodes, uint8_t node_id) {
-	if (*nodes != NULL) {
-		if ((*nodes)->node_id == node_id) {
-			// The node to delete is the first node
-			struct node *deleted_node = *nodes;
-			*nodes = (*nodes)->next;
-			free(deleted_node);
-		} else {
-			struct node *current = (*nodes)->next;
-			struct node *previous = *nodes;
-			while (current != NULL) {
-				if (current->node_id == node_id) {
-					// Delete node
-					previous->next = current->next;
-					free(current);
-					return;	
-				}
-				previous = current;
-				current = current->next;
-			}
-		}
-	}
-}
-
-/**
- * Removes all the expired nodes from @nodes
- */
-static void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
-	int now = (int) time(NULL);
-	struct node *deleted_node;
-	while (*nodes != NULL && (now - (*nodes)->timestamp > max_elapsed_secs)) {
-		deleted_node = *nodes;
-		*nodes = (*nodes)->next;
-		free(deleted_node);
-	}
-}
-
-/**
- * Returns the node corresponding to |node_id if present in @nodes, NULL otherwise
- */
-static struct node *get_node(struct node *nodes, uint8_t node_id) {
-	struct node *current = nodes;
-	while (current != NULL) {
-		if (current->node_id == node_id) {
-			return current;
-		}
-		current = current->next;
-	}
-	return NULL;
 }
 
 // Useless for now (perhaps useful later ?)

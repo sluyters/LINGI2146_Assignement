@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #include "message.h"
+#include "node.h"
 
 #include "net/rime.h"
 
@@ -20,6 +21,10 @@ struct runicast_conn runicast;
 struct broadcast_conn broadcast;
 
 /*-----------------------------------------------------------------------------*/
+/* Save child nodes */
+struct node *childs = NULL;
+
+/*-----------------------------------------------------------------------------*/
 uint8_t my_id = 0;
 uint8_t tree_version = 0; 
 
@@ -29,7 +34,6 @@ PROCESS(my_process, "My process");
 PROCESS(gateway_process, "Gateway process");
 AUTOSTART_PROCESSES(&my_process, &gateway_process);
 
-// TODO Handle childs
 // TODO Prevent concurrent access issues
 
 /*-----------------------------------------------------------------------------*/
@@ -80,6 +84,9 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 	switch (decoded_msg->header->msg_type) {
 		case DESTINATION_ADVERTISEMENT:;
 			struct msg_dest_ad_payload *payload_dest_ad = (struct msg_dest_ad_payload *) decoded_msg->payload;
+			// Add to list of childs (or update)
+			add_node(&childs, from, payload_dest_ad->source_id, 0);
+			// Send the info to the gateway
 			printf("ADVERTISE %d %d\n", payload_dest_ad->source_id, payload_dest_ad->subject_id);
 			break;
 		case SENSOR_DATA:;
@@ -185,12 +192,20 @@ PROCESS_THREAD(gateway_process, ev, data)
 		uint32_t len = encode_message(msg, &encoded_msg);
 		packetbuf_copyfrom(encoded_msg, len);
 		if (dst < 0) {
-			// TODO Send to all childs
-
+			// Send to all childs
+			struct node *current_child = childs;
+			while (current_child != NULL) {
+				msg->payload->destination_id = current_child->node_id;
+				runicast_send(&runicast, &(current_child->addr_via), 1);
+				current_child = current_child->next;
+			}
 		} else {
-			// TODO Send to the child with id = dst
+			// Send to the child with id = dst
 			msg->payload->destination_id = dst;
-			//runicast_send(&runicast, &(child->addr_via), 1);
+			struct node *child = get_node(childs, dst);
+			if (child != NULL) {
+				runicast_send(&runicast, &(child->addr_via), 1);
+			}
 		}
 		free_message(msg);
 	}
