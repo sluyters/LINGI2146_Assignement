@@ -44,6 +44,7 @@ struct node *parent = NULL;
 struct node *childs = NULL;
 
 uint8_t my_id = 42; // TODO Modify this
+uint8_t my_subject_id = 0;
 uint8_t tree_version = 0; 
 int tree_stable = 0; // A the beginning, the tree is not stable 
 
@@ -208,6 +209,7 @@ static void get_msg(struct message *msg, int msg_type) {
 		case DESTINATION_ADVERTISEMENT:;
 			struct msg_dest_ad_payload *payload_dest_ad = (struct msg_dest_ad_payload *) malloc(sizeof(struct msg_dest_ad_payload));
 			payload_dest_ad->source_id = my_id;
+			payload_dest_ad->subject_id = my_subject_id;
 			payload_dest_ad->tree_version = tree_version;
 			msg->header->length = sizeof(struct msg_dest_ad_payload);
 			msg->payload = payload_dest_ad;
@@ -482,7 +484,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 				struct msg_data_payload *payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
 				payload->data_header =  (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
 				payload->data_header->source_id = my_id;
-				payload->data_header->subject_id = 42;
+				payload->data_header->subject_id = my_subject_id;
 				payload->data_header->length = sizeof(int);
 				payload->data = malloc(sizeof(int));
 				memcpy(payload->data, &data, sizeof(int));
@@ -496,7 +498,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 
 		// Send DESTINATION_ADVERTISEMENT to indicate that this node is still up (every 120 seconds)
 		if (iter % 4 == 0) {
-			send_runicast_msg(TREE_ADVERTISEMENT, &(parent->addr_via));
+			send_runicast_msg(DESTINATION_ADVERTISEMENT, &(parent->addr_via));
 		}
 	}
 

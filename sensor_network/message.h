@@ -30,6 +30,7 @@ struct msg_header {
 struct msg_dest_ad_payload {
 	uint8_t tree_version;
 	uint8_t source_id;
+	uint8_t subject_id;
 };
 
 struct msg_tree_ad_payload {

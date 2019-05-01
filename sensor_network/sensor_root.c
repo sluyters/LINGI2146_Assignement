@@ -80,7 +80,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 	switch (decoded_msg->header->msg_type) {
 		case DESTINATION_ADVERTISEMENT:;
 			struct msg_dest_ad_payload *payload_dest_ad = (struct msg_dest_ad_payload *) decoded_msg->payload;
-			printf("DEST_AD %d\n", payload_dest_ad->source_id);
+			printf("ADVERTISE %d %d\n", payload_dest_ad->source_id, payload_dest_ad->subject_id);
 			break;
 		case SENSOR_DATA:;
 			// Send data to the gateway.
@@ -170,10 +170,10 @@ PROCESS_THREAD(gateway_process, ev, data)
 				break;
 			case 1:
 				// Send data / Don't send data
-				if (val == 0) {
+				if (val == 1) {
 					// Send data
 					msg->payload->command = 0x21;
-				} else if (val == 1) {
+				} else if (val == 0) {
 					// Don't send data
 					msg->payload->command = 0x20;
 				}

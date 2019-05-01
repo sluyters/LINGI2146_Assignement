@@ -5,13 +5,16 @@ import time
 import paho.mqtt.client as mqtt
 import subprocess
 
+# ("subject name", list of sensors, list of receivers)
 topicdict = {
-    0: "temperature",
-    1: "swagdensity",
-    2: "whatAmIDoingWithMyLife"
+    0: ("temperature", [], []),
+    1: ("swagdensity", [], []),
+    2: ("whatAmIDoingWithMyLife", [], [])
 }
 
+
 # TODO If no receiver for this data, send a SENSOR_CONTROL message to the sensor(s) sending this data to disable it
+# TODO Send a SENSOR_CONTROL message to a sensor when a subscriber subscribes to reactivate it
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect_callback(client, userdata, flags, rc):
@@ -41,6 +44,15 @@ def sensors_interface(mqttc, communication_process):
             subject_id = int(data[2])
             msg_content = data[3]
             mqttc.publish(topicdict(subject_id), payload=msg_content, qos=0, retain=False)
+        elif data[0] == "ADVERTISE":
+            sensor_id = int(data[1])
+            subject_id = int(data[2])
+            # Add the sensor to the list of sensors for this subject
+            if sensor_id not in topicdict[subject_id][1]:
+                topicdict[subject_id][1].append(sensor_id)
+                # If no subscriber, send a control message to stop sending data
+                if len(topicdict[subject_id][2]) == 0:
+                    communication_process.stdin.write("1 0 {:d}".format(sensor_id))
     communication_process.terminate()
 
 def main():
