@@ -29,7 +29,6 @@ PROCESS(my_process, "My process");
 PROCESS(gateway_process, "Gateway process");
 AUTOSTART_PROCESSES(&my_process, &gateway_process);
 
-// TODO If no receiver for this data, send a SENSOR_CONTROL message to the sensor(s) sending this data to disable it
 // TODO Handle childs
 // TODO Prevent concurrent access issues
 

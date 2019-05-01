@@ -11,6 +11,8 @@ topicdict = {
     2: "whatAmIDoingWithMyLife"
 }
 
+# TODO If no receiver for this data, send a SENSOR_CONTROL message to the sensor(s) sending this data to disable it
+
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect_callback(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
