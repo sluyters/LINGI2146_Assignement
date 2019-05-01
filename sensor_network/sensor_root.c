@@ -26,9 +26,12 @@ uint8_t tree_version = 0;
 /*-----------------------------------------------------------------------------*/
 /* Declaration of the processes */
 PROCESS(my_process, "My process");
-AUTOSTART_PROCESSES(&my_process);
+PROCESS(gateway_process, "Gateway process");
+AUTOSTART_PROCESSES(&my_process, &gateway_process);
 
 // TODO If no receiver for this data, send a SENSOR_CONTROL message to the sensor(s) sending this data to disable it
+// TODO Handle childs
+// TODO Prevent concurrent access issues
 
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a broadcast message is received */
@@ -127,9 +130,8 @@ PROCESS_THREAD(my_process, ev, data)
 	PROCESS_END();
 }
 
-PROCESS_THREAD(my_process, ev, data)
+PROCESS_THREAD(gateway_process, ev, data)
 {
-	// TODO
 	static struct etimer et;
 
 	PROCESS_EXITHANDLER(runicast_close(&runicast);)
@@ -159,10 +161,10 @@ PROCESS_THREAD(my_process, ev, data)
 		switch (cmd) {
 			case 0:
 				// Send data periodically / Send data on change
-				if (val == 0) {
+				if (val == 1) {
 					// Send data periodically
 					msg->payload->command = 0x11;
-				} else if (val == 1) {
+				} else if (val == 0) {
 					// Send data on change
 					msg->payload->command = 0x10;
 				}

@@ -15,32 +15,31 @@ topicdict = {
 def on_connect_callback(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
 
-def handle_cmd():
+def handle_cmd(communication_process):
     while True:
         cmd = input("Type any command...\n").strip()
         print(cmd)
         # Send command
         if cmd.upper() == "SEND PERIODICALLY":
-            # Send command to root node
-            pass
+            # Send command to root node (cmd val dst)
+            communication_process.stdin.write("0 1 -1")
         elif cmd.upper() == "SEND ON CHANGE":
             # Send command to root node
-            pass
+            communication_process.stdin.write("0 0 -1")
         else:
             print("Unknown command. Try typing SEND PERIODICALLY or SEND ON CHANGE")
 
-def sensors_interface(mqttc):
+def sensors_interface(mqttc, communication_process):
     # Start serialdump tool, read each line
-    with subprocess.Popen(["../../tools/sky/serialdump-linux", "-b115200", "/dev/ttyUSB0"], stdout=subprocess.PIPE, stdin=subprocess.PIPE, bufsize=1, universal_newlines=True) as p:
-        for line in p.stdout:
-            print(line, end='')
-            data = line.split()
-            if data[0] == "PUBLISH":
-                sensor_id = int(data[1])
-                subject_id = int(data[2])
-                msg_content = data[3]
-                mqttc.publish(topicdict(subject_id), payload=msg_content, qos=0, retain=False)
-    p.terminate()
+    for line in communication_process.stdout:
+        print(line, end='')
+        data = line.split()
+        if data[0] == "PUBLISH":
+            sensor_id = int(data[1])
+            subject_id = int(data[2])
+            msg_content = data[3]
+            mqttc.publish(topicdict(subject_id), payload=msg_content, qos=0, retain=False)
+    communication_process.terminate()
 
 def main():
     # Connect to the broker
@@ -51,8 +50,10 @@ def main():
 
     client.connect(host, port=1883, keepalive=60, bind_address="")
 
-    threading.Thread(target = handle_cmd).start()
-    threading.Thread(target=sensors_interface, args=(client)).start()
+    p = subprocess.Popen(["../../tools/sky/serialdump-linux", "-b115200", "/dev/ttyUSB0"], stdout=subprocess.PIPE, stdin=subprocess.PIPE, bufsize=1, universal_newlines=True)
+
+    threading.Thread(target = handle_cmd, args=(p)).start()
+    threading.Thread(target=sensors_interface, args=(client, p)).start()
 
 if __name__ == '__main__':
     main()
