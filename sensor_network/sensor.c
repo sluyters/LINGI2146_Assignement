@@ -390,15 +390,17 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 			struct msg_control_payload *payload_ctrl = (struct msg_control_payload *) decoded_msg->payload;
 			// Check if message is destined to this sensor
 			if (my_id == payload_ctrl->destination_id) {
-				// Adapt sensor setting (each control message must contain all settings)
-				send_data = payload_ctrl->command & 0x1;
-				send_periodically = (payload_ctrl->command & 0x2) >> 1;
-
+				// Adapt sensor setting
+				if ((payload_ctrl->command & ~0x1) == 0x10) {
+					send_periodically = payload_ctrl->command & 0x1;
+				} else if ((payload_ctrl->command & ~0x1) == 0x20) {
+					send_data = payload_ctrl->command & 0x1;
+				}
 			} else {
 				struct node* child = get_node(childs, payload_ctrl->destination_id);
 				if (child != NULL) {
 					// Forward control message to child
-					packetbuf_copyfrom(decoded_msg, packetbuf_datalen());
+					packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
 					runicast_send(&runicast, &(child->addr_via), 1);
 				}
 			}
@@ -415,13 +417,6 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 // Set the function to be called when a broadcast message is received
 static const struct runicast_callbacks runicast_callbacks = {runicast_recv};
 
-/*
-static void exit_handler(struct *broadcast_conn bc, struct *runicast_conn rc) {
-	broadcast_close(bc);
-	runicast_close(rc);
-}
-*/
-
 /*-----------------------------------------------------------------------------*/
 /* Process */
 PROCESS_THREAD(my_process, ev, data)
@@ -432,7 +427,7 @@ PROCESS_THREAD(my_process, ev, data)
 
 	PROCESS_BEGIN();
 
-	runicast_open(&runicast, 146, &runicast_callbacks);
+	broadcast_open(&broadcast, 129, &broadcast_callbacks);
 
 	while (1) {
 		// Every 25 to 35 seconds
@@ -461,12 +456,13 @@ PROCESS_THREAD(sensor_process, ev, data)
 {
 	static struct etimer et;
 	uint8_t iter = 0;
+	int last_data = -1;
 
 	PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
 	PROCESS_BEGIN();
 
-	broadcast_open(&broadcast, 129, &broadcast_callbacks);
+	runicast_open(&runicast, 146, &runicast_callbacks);
 
 	while (1) {
 		iter += 1;
@@ -475,22 +471,28 @@ PROCESS_THREAD(sensor_process, ev, data)
 
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
-		// TODO Generate data, create message
-		struct message *msg = (struct message *) malloc(sizeof(struct message));	
-		get_msg(msg, SENSOR_DATA);
-		struct msg_data_payload *payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
-		payload->data_header =  (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
-		payload->data_header->source_id = my_id;
-		payload->data_header->subject_id = 42;
-		payload->data_header->length = sizeof(int);
-		int *data = (int *) malloc(sizeof(int));
-		*data = 69; // Sensor value
-		payload->data = data;
-		msg->header->length = sizeof(struct msg_data_payload_h) + sizeof(int);
-		msg->payload = payload;
+		if (send_data) {
+			// TODO generate random sensor data
+			int data = 69; // Sensor value
 
-		// Send data
-		handle_sensor_data_msg(msg);
+			// Send data
+			if (send_periodically || (data != last_data)) {
+				struct message *msg = (struct message *) malloc(sizeof(struct message));	
+				get_msg(msg, SENSOR_DATA);
+				struct msg_data_payload *payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+				payload->data_header =  (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
+				payload->data_header->source_id = my_id;
+				payload->data_header->subject_id = 42;
+				payload->data_header->length = sizeof(int);
+				payload->data = malloc(sizeof(int));
+				memcpy(payload->data, &data, sizeof(int));
+				msg->header->length = sizeof(struct msg_data_payload_h) + sizeof(int);
+				msg->payload = payload;
+
+				handle_sensor_data_msg(msg);
+			}
+			last_data = data;
+		}
 
 		// Send DESTINATION_ADVERTISEMENT to indicate that this node is still up (every 120 seconds)
 		if (iter % 4 == 0) {

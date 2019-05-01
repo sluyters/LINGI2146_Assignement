@@ -103,33 +103,95 @@ static const struct runicast_callbacks rc = {runicast_recv};
 /* Process */
 PROCESS_THREAD(my_process, ev, data)
 {
-	// TODO
 	static struct etimer et;
 
-	//PROCESS_EXITHANDLER(broadcast_close(&broadcast);) 
+	PROCESS_EXITHANDLER(broadcast_close(&broadcast);) 
 
 	PROCESS_BEGIN();
 
-	//runicast_open(&runicast, 146, &runicast_callbacks);
+	broadcast_open(&broadcast, 129, &broadcast_callbacks);
 
 	while (1) {
 		// Every 25 to 35 seconds
 		etimer_set(&et, CLOCK_SECOND * 25 + random_rand() % (CLOCK_SECOND * 10));
 
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-		/*
-		remove_expired_nodes(&parent, 90);
-		if (parent == NULL) {
-			tree_stable = 0;
-			// Broadcast a TREE_INFORMATION_REQUEST
-			send_broadcast_msg(TREE_INFORMATION_REQUEST);
-		} else {
-			// Advertise the tree (broadcast a TREE_ADVERTISEMENT)
-			send_broadcast_msg(TREE_ADVERTISEMENT);
-		}
+
+		// Advertise the tree (broadcast a TREE_ADVERTISEMENT)
+		send_broadcast_msg(TREE_ADVERTISEMENT);
 
 		// Remove childs that have not sent any message since a long time (more than 240 seconds)
-		remove_expired_nodes(&childs, 240);*/
+		remove_expired_nodes(&childs, 240);
+	}
+
+	PROCESS_END();
+}
+
+PROCESS_THREAD(my_process, ev, data)
+{
+	// TODO
+	static struct etimer et;
+
+	PROCESS_EXITHANDLER(runicast_close(&runicast);)
+
+	PROCESS_BEGIN();
+
+	runicast_open(&runicast, 146, &runicast_callbacks);
+
+	while (1) {
+		// Every second
+		etimer_set(&et, CLOCK_SECOND);
+
+    	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+		
+		// Read stdin
+		int cmd;
+		int val;
+		int dst;
+		scanf("%d %d %d", &cmd, &val, &dst);
+
+		// Initialize correct control message
+		struct message *msg = (struct message *) malloc(sizeof(struct message));
+		msg->header = (struct msg_header *) malloc(sizeof(struct msg_header));
+		msg->header->version = version;
+		msg->header->msg_type = SENSOR_CONTROL;
+		msg->payload = (struct msg_control_payload *) malloc(sizeof(struct msg_control_payload)); 
+		switch (cmd) {
+			case 0:
+				// Send data periodically / Send data on change
+				if (val == 0) {
+					// Send data periodically
+					msg->payload->command = 0x11;
+				} else if (val == 1) {
+					// Send data on change
+					msg->payload->command = 0x10;
+				}
+				break;
+			case 1:
+				// Send data / Don't send data
+				if (val == 0) {
+					// Send data
+					msg->payload->command = 0x21;
+				} else if (val == 1) {
+					// Don't send data
+					msg->payload->command = 0x20;
+				}
+				break;
+			default:
+				break;
+		}
+		char *encoded_msg;
+		uint32_t len = encode_message(msg, &encoded_msg);
+		packetbuf_copyfrom(encoded_msg, len);
+		if (dst < 0) {
+			// TODO Send to all childs
+
+		} else {
+			// TODO Send to the child with id = dst
+			msg->payload->destination_id = dst;
+			//runicast_send(&runicast, &(child->addr_via), 1);
+		}
+		free_message(msg);
 	}
 
 	PROCESS_END();

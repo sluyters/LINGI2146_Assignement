@@ -17,9 +17,17 @@ def on_connect_callback(client, userdata, flags, rc):
 
 def handle_cmd():
     while True:
-        cmd = input("Type any command...\n")
+        cmd = input("Type any command...\n").strip()
         print(cmd)
         # Send command
+        if cmd.upper() == "SEND PERIODICALLY":
+            # Send command to root node
+            pass
+        elif cmd.upper() == "SEND ON CHANGE":
+            # Send command to root node
+            pass
+        else:
+            print("Unknown command. Try typing SEND PERIODICALLY or SEND ON CHANGE")
 
 def sensors_interface(mqttc):
     # Start serialdump tool, read each line
