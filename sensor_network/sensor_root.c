@@ -1,10 +1,12 @@
 #include "contiki.h"
 #include "contiki-lib.h"
 #include "contiki-net.h"
+#include "dev/serial-line.h"
 
 #include <time.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #include "message.h"
 #include "node.h"
@@ -35,6 +37,7 @@ PROCESS(gateway_process, "Gateway process");
 AUTOSTART_PROCESSES(&my_process, &gateway_process);
 
 // TODO Prevent concurrent access issues
+// TODO Replace get_time by another function
 
 /*-----------------------------------------------------------------------------*/
 /* Helper funcions */
@@ -180,86 +183,104 @@ PROCESS_THREAD(my_process, ev, data)
 
 PROCESS_THREAD(gateway_process, ev, data)
 {
-	static struct etimer et;
-
 	PROCESS_EXITHANDLER(unicast_close(&unicast);)
 
 	PROCESS_BEGIN();
 
 	unicast_open(&unicast, 146, &rc);
 
-	while (1) {
-		// Every second
-		etimer_set(&et, CLOCK_SECOND);
-
-    	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+	for (;;) {
+	
+		PROCESS_YIELD();
 		
-		// Read stdin
-		int cmd;
-		int val;
-		int dst;
-		scanf("%d %d %d", &cmd, &val, &dst);
+		if(ev == serial_line_event_message) {
+			printf("received line: %s\n", (char *)data);
+		
+			// Read stdin
+			int cmd = -1;
+			int val = -1;
+			int dst = -1;
+			int n_data = 0;
+			char *input = (char *) data;
+			// Decode input
+			while (*input && (n_data < 3)) {
+				if (isdigit(*input) || ((*input == '-') && isdigit(*(input+1)))) {
+					// Number
+					if (n_data == 0) {
+						cmd = strtol(input, &input, 10);
+					} else if (n_data == 1) {
+						val = strtol(input, &input, 10);
+					} else {
+						dst = strtol(input, &input, 10);
+					}
+					n_data++;
+				} else {
+					// Move to next char
+					input++;
+				}
+			}
 
-		// Initialize correct control message
-		struct message *msg = (struct message *) malloc(sizeof(struct message));
-		msg->header = (struct msg_header *) malloc(sizeof(struct msg_header));
-		msg->header->version = version;
-		msg->header->msg_type = SENSOR_CONTROL;
-		struct msg_control_payload *payload = (struct msg_control_payload *) malloc(sizeof(struct msg_control_payload)); 
-		switch (cmd) {
-			case 0:
-				// Send data periodically / Send data on change
-				if (val == 1) {
-					// Send data periodically
-					payload->command = 0x11;
-				} else if (val == 0) {
-					// Send data on change
-					payload->command = 0x10;
+			// Initialize correct control message
+			struct message *msg = (struct message *) malloc(sizeof(struct message));
+			msg->header = (struct msg_header *) malloc(sizeof(struct msg_header));
+			msg->header->version = version;
+			msg->header->msg_type = SENSOR_CONTROL;
+			struct msg_control_payload *payload = (struct msg_control_payload *) malloc(sizeof(struct msg_control_payload)); 
+			switch (cmd) {
+				case 0:
+					// Send data periodically / Send data on change
+					if (val == 1) {
+						// Send data periodically
+						payload->command = 0x11;
+					} else if (val == 0) {
+						// Send data on change
+						payload->command = 0x10;
+					}
+					break;
+				case 1:
+					// Send data / Don't send data
+					if (val == 1) {
+						// Send data
+						payload->command = 0x21;
+					} else if (val == 0) {
+						// Don't send data
+						payload->command = 0x20;
+					}
+					break;
+				default:
+					break;
+			}
+			char *encoded_msg;
+			uint32_t len = encode_message(msg, &encoded_msg);
+			packetbuf_copyfrom(encoded_msg, len);
+			if (dst < 0) {
+				// Send to all childs
+				struct node *current_child = childs;
+				while (current_child != NULL) {
+					payload->destination_id = current_child->node_id;
+					msg->payload = payload;
+					char *encoded_msg;
+					uint32_t len = encode_message(msg, &encoded_msg);
+					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
+					unicast_send(&unicast, &(current_child->addr_via));
+					current_child = current_child->next;
+					free(encoded_msg);
 				}
-				break;
-			case 1:
-				// Send data / Don't send data
-				if (val == 1) {
-					// Send data
-					payload->command = 0x21;
-				} else if (val == 0) {
-					// Don't send data
-					payload->command = 0x20;
-				}
-				break;
-			default:
-				break;
-		}
-		char *encoded_msg;
-		uint32_t len = encode_message(msg, &encoded_msg);
-		packetbuf_copyfrom(encoded_msg, len);
-		if (dst < 0) {
-			// Send to all childs
-			struct node *current_child = childs;
-			while (current_child != NULL) {
-				payload->destination_id = current_child->node_id;
+			} else {
+				// Send to the child with id = dst
+				payload->destination_id = dst;
 				msg->payload = payload;
-				char *encoded_msg;
-				uint32_t len = encode_message(msg, &encoded_msg);
-				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-				unicast_send(&unicast, &(current_child->addr_via));
-				current_child = current_child->next;
-				free(encoded_msg);
+				struct node *child = get_node(childs, dst);
+				if (child != NULL) {
+					char *encoded_msg;
+					uint32_t len = encode_message(msg, &encoded_msg);
+					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
+					unicast_send(&unicast, &(child->addr_via));
+					free(encoded_msg);
+				}
 			}
-		} else {
-			// Send to the child with id = dst
-			payload->destination_id = dst;
-			msg->payload = payload;
-			struct node *child = get_node(childs, dst);
-			if (child != NULL) {
-				char *encoded_msg;
-				uint32_t len = encode_message(msg, &encoded_msg);
-				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-				unicast_send(&unicast, &(child->addr_via));
-				free(encoded_msg);
-			}
+			free_message(msg);
 		}
-		free_message(msg);
 	}
 
 	PROCESS_END();
