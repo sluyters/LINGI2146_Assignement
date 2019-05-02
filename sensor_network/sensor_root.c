@@ -13,11 +13,11 @@
 
 /*-----------------------------------------------------------------------------*/
 /* Configuration values */
-const uint16_t runicast_channel = 142;
+const uint16_t unicast_channel = 142;
 const uint16_t broadcast_channel = 169;
 const uint8_t version = 1;
 
-struct runicast_conn runicast;
+struct unicast_conn unicast;
 struct broadcast_conn broadcast;
 
 /*-----------------------------------------------------------------------------*/
@@ -105,7 +105,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			char *encoded_msg;
 			uint32_t len = encode_message(&msg, &encoded_msg);
 			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-			runicast_send(&runicast, from, 1);	
+			unicast_send(&unicast, from, 1);	
 			break;
 		default:
 			break;
@@ -117,7 +117,7 @@ static const struct broadcast_callbacks bc = {broadcast_recv};
 
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a unicast message is received */
-static void runicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
+static void unicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
 	char *encoded_msg = packetbuf_dataptr();
 	struct message *decoded_msg;
@@ -242,7 +242,7 @@ PROCESS_THREAD(gateway_process, ev, data)
 				char *encoded_msg;
 				uint32_t len = encode_message(msg, &encoded_msg);
 				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-				runicast_send(&runicast, &(current_child->addr_via), 1);
+				unicast_send(&unicast, &(current_child->addr_via), 1);
 				current_child = current_child->next;
 				free(encoded_msg);
 			}
@@ -255,7 +255,7 @@ PROCESS_THREAD(gateway_process, ev, data)
 				char *encoded_msg;
 				uint32_t len = encode_message(msg, &encoded_msg);
 				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-				runicast_send(&runicast, &(child->addr_via), 1);
+				unicast_send(&unicast, &(child->addr_via), 1);
 				free(encoded_msg);
 			}
 		}

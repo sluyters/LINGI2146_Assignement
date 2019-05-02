@@ -19,11 +19,11 @@
 
 /*-----------------------------------------------------------------------------*/
 /* Configuration values */
-const uint16_t runicast_channel = 142;
+const uint16_t unicast_channel = 142;
 const uint16_t broadcast_channel = 169;
 const uint8_t version = 1;
 
-struct runicast_conn runicast;
+struct unicast_conn unicast;
 struct broadcast_conn broadcast;
 
 /*-----------------------------------------------------------------------------*/
@@ -61,7 +61,7 @@ static void send_aggregate_msg(void *ptr) {
 	char *encoded_msg;
 	uint32_t len = encode_message(data_aggregate_msg, &encoded_msg);
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-	runicast_send(&runicast, &(parent->addr_via), 1);
+	unicast_send(&unicast, &(parent->addr_via), 1);
 	free_message(data_aggregate_msg);
 	free(encoded_msg);
 	data_aggregate_msg = NULL;
@@ -73,7 +73,7 @@ static void send_to_childs(void *msg, int length) {
 	struct node *current = childs;
 	while (current != NULL) {
 		packetbuf_copyfrom(encoded_msg, length);	// Put data inside the packet
-		runicast_send(&runicast, &(current->addr_via), 1); 
+		unicast_send(&unicast, &(current->addr_via), 1); 
 	}
 }
 */
@@ -139,13 +139,13 @@ static void send_broadcast_msg(int msg_type) {
 /**
  * Sends a simple unicast message of type @msg_type to @addr_dest
  */ 
-static void send_runicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
+static void send_unicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
 	struct message *msg = (struct message *) malloc(sizeof(struct message));
 	char *encoded_msg;	
 	get_msg(msg, msg_type);
 	uint32_t len = encode_message(msg, &encoded_msg);
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-	runicast_send(&runicast, addr_dest, 1);
+	unicast_send(&unicast, addr_dest, 1);
 	free(encoded_msg);
 	free_message(msg);
 }
@@ -163,7 +163,7 @@ static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t 
 			// Add the new parent
 			add_node(&parent, from, payload->source_id, payload->n_hops + 1);
 			// Send a DESTINATION_ADVERTISEMENT message to the new parent node
-			send_runicast_msg(DESTINATION_ADVERTISEMENT, from);
+			send_unicast_msg(DESTINATION_ADVERTISEMENT, from);
 			// Broadcast the new tree
 			send_broadcast_msg(TREE_ADVERTISEMENT);
 			// Update tree version + consider the tree as stable
@@ -188,7 +188,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 		char *encoded_msg;
 		uint32_t len = encode_message(msg, &encoded_msg);
 		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-		runicast_send(&runicast, &(parent->addr_via), 1);
+		unicast_send(&unicast, &(parent->addr_via), 1);
 		free_message(msg);
 		free(encoded_msg);
 	} else if (data_aggregate_msg == NULL) {
@@ -200,7 +200,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 		char *encoded_msg;
 		uint32_t len = encode_message(data_aggregate_msg, &encoded_msg);
 		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-		runicast_send(&runicast, &(parent->addr_via), 1);
+		unicast_send(&unicast, &(parent->addr_via), 1);
 		free_message(data_aggregate_msg);
 		free(encoded_msg);
 		data_aggregate_msg = msg;
@@ -240,7 +240,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			} else {
 				if (parent != NULL && payload_info_req->tree_version <= tree_version) {
 					// Send TREE_ADVERTISEMENT response
-					send_runicast_msg(TREE_ADVERTISEMENT, from);
+					send_unicast_msg(TREE_ADVERTISEMENT, from);
 				}
 			}
 			break;
@@ -258,7 +258,7 @@ static const struct broadcast_callbacks broadcast_callbacks = {broadcast_recv};
 
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a unicast message is received */
-static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
+static void unicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
 	char *encoded_msg = packetbuf_dataptr();
 	struct message *decoded_msg;
@@ -273,7 +273,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 				add_node(&childs, from, payload_dest_ad->source_id, 0);
 				// Forward message to parent
 				packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
-				runicast_send(&runicast, &(parent->addr_via), 1);
+				unicast_send(&unicast, &(parent->addr_via), 1);
 				free_message(decoded_msg);
 			}
 			break;
@@ -295,7 +295,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 				if (child != NULL) {
 					// Forward control message to child
 					packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
-					runicast_send(&runicast, &(child->addr_via), 1);
+					unicast_send(&unicast, &(child->addr_via), 1);
 				}
 			}
 			free_message(decoded_msg);
@@ -309,7 +309,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 }
 
 // Set the function to be called when a broadcast message is received
-static const struct runicast_callbacks runicast_callbacks = {runicast_recv};
+static const struct unicast_callbacks unicast_callbacks = {unicast_recv};
 
 /*-----------------------------------------------------------------------------*/
 /* Process */
@@ -352,11 +352,11 @@ PROCESS_THREAD(sensor_process, ev, data)
 	uint8_t iter = 0;
 	int last_data = -1;
 
-	PROCESS_EXITHANDLER(runicast_close(&runicast);)
+	PROCESS_EXITHANDLER(unicast_close(&unicast);)
 
 	PROCESS_BEGIN();
 
-	runicast_open(&runicast, 146, &runicast_callbacks);
+	unicast_open(&unicast, 146, &unicast_callbacks);
 
 	while (1) {
 		iter += 1;
@@ -390,7 +390,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 
 		// Send DESTINATION_ADVERTISEMENT to indicate that this node is still up (every 120 seconds)
 		if (iter % 4 == 0) {
-			send_runicast_msg(DESTINATION_ADVERTISEMENT, &(parent->addr_via));
+			send_unicast_msg(DESTINATION_ADVERTISEMENT, &(parent->addr_via));
 		}
 	}
 
