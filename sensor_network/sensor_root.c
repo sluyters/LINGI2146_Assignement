@@ -105,7 +105,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			char *encoded_msg;
 			uint32_t len = encode_message(&msg, &encoded_msg);
 			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-			unicast_send(&unicast, from, 1);	
+			unicast_send(&unicast, from);	
 			break;
 		default:
 			break;
@@ -242,7 +242,7 @@ PROCESS_THREAD(gateway_process, ev, data)
 				char *encoded_msg;
 				uint32_t len = encode_message(msg, &encoded_msg);
 				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-				unicast_send(&unicast, &(current_child->addr_via), 1);
+				unicast_send(&unicast, &(current_child->addr_via));
 				current_child = current_child->next;
 				free(encoded_msg);
 			}
@@ -255,7 +255,7 @@ PROCESS_THREAD(gateway_process, ev, data)
 				char *encoded_msg;
 				uint32_t len = encode_message(msg, &encoded_msg);
 				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-				unicast_send(&unicast, &(child->addr_via), 1);
+				unicast_send(&unicast, &(child->addr_via));
 				free(encoded_msg);
 			}
 		}

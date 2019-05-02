@@ -61,7 +61,7 @@ static void send_aggregate_msg(void *ptr) {
 	char *encoded_msg;
 	uint32_t len = encode_message(data_aggregate_msg, &encoded_msg);
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-	unicast_send(&unicast, &(parent->addr_via), 1);
+	unicast_send(&unicast, &(parent->addr_via));
 	free_message(data_aggregate_msg);
 	free(encoded_msg);
 	data_aggregate_msg = NULL;
@@ -73,7 +73,7 @@ static void send_to_childs(void *msg, int length) {
 	struct node *current = childs;
 	while (current != NULL) {
 		packetbuf_copyfrom(encoded_msg, length);	// Put data inside the packet
-		unicast_send(&unicast, &(current->addr_via), 1); 
+		unicast_send(&unicast, &(current->addr_via)); 
 	}
 }
 */
@@ -145,7 +145,7 @@ static void send_unicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
 	get_msg(msg, msg_type);
 	uint32_t len = encode_message(msg, &encoded_msg);
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-	unicast_send(&unicast, addr_dest, 1);
+	unicast_send(&unicast, addr_dest);
 	free(encoded_msg);
 	free_message(msg);
 }
@@ -188,7 +188,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 		char *encoded_msg;
 		uint32_t len = encode_message(msg, &encoded_msg);
 		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-		unicast_send(&unicast, &(parent->addr_via), 1);
+		unicast_send(&unicast, &(parent->addr_via));
 		free_message(msg);
 		free(encoded_msg);
 	} else if (data_aggregate_msg == NULL) {
@@ -200,7 +200,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 		char *encoded_msg;
 		uint32_t len = encode_message(data_aggregate_msg, &encoded_msg);
 		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-		unicast_send(&unicast, &(parent->addr_via), 1);
+		unicast_send(&unicast, &(parent->addr_via));
 		free_message(data_aggregate_msg);
 		free(encoded_msg);
 		data_aggregate_msg = msg;
@@ -273,7 +273,7 @@ static void unicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
 				add_node(&childs, from, payload_dest_ad->source_id, 0);
 				// Forward message to parent
 				packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
-				unicast_send(&unicast, &(parent->addr_via), 1);
+				unicast_send(&unicast, &(parent->addr_via));
 				free_message(decoded_msg);
 			}
 			break;
@@ -295,7 +295,7 @@ static void unicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
 				if (child != NULL) {
 					// Forward control message to child
 					packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
-					unicast_send(&unicast, &(child->addr_via), 1);
+					unicast_send(&unicast, &(child->addr_via));
 				}
 			}
 			free_message(decoded_msg);
