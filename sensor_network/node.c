@@ -3,7 +3,7 @@
 /**
  * Adds the new node to the @nodes list, or update its data if it is already present
  */
-static void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t node_id, uint8_t n_hops) {
+void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t node_id, uint8_t n_hops) {
 	if (*nodes == NULL) {
 		// If the list is empty, create a new node
 		*nodes = (struct node *) malloc(sizeof(struct node));
@@ -51,7 +51,7 @@ static void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t no
 /**
  * Returns the node corresponding to @node_id from @nodes
  */
-static void remove_node(struct node **nodes, uint8_t node_id) {
+void remove_node(struct node **nodes, uint8_t node_id) {
 	if (*nodes != NULL) {
 		if ((*nodes)->node_id == node_id) {
 			// The node to delete is the first node
@@ -78,7 +78,7 @@ static void remove_node(struct node **nodes, uint8_t node_id) {
 /**
  * Removes all the expired nodes from @nodes
  */
-static void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
+void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
 	int now = (int) time(NULL);
 	struct node *deleted_node;
 	while (*nodes != NULL && (now - (*nodes)->timestamp > max_elapsed_secs)) {
@@ -91,7 +91,7 @@ static void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
 /**
  * Returns the node corresponding to |node_id if present in @nodes, NULL otherwise
  */
-static struct node *get_node(struct node *nodes, uint8_t node_id) {
+struct node *get_node(struct node *nodes, uint8_t node_id) {
 	struct node *current = nodes;
 	while (current != NULL) {
 		if (current->node_id == node_id) {

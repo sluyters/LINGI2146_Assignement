@@ -37,6 +37,48 @@ AUTOSTART_PROCESSES(&my_process, &gateway_process);
 // TODO Prevent concurrent access issues
 
 /*-----------------------------------------------------------------------------*/
+/* Helper funcions */
+
+/**
+ * Initializes a simple message of type @msg_type
+ */
+static void get_msg(struct message *msg, int msg_type) {
+	msg->header = (struct msg_header *) malloc(sizeof(struct msg_header));
+	msg->header->version = version;
+	msg->header->msg_type = msg_type;
+	switch (msg_type) {
+		case SENSOR_DATA:;
+			msg->payload = NULL;
+			msg->header->length = 0;
+			break;
+		case TREE_ADVERTISEMENT:;
+			struct msg_tree_ad_payload *payload_tree_ad = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
+			payload_tree_ad->n_hops = 0;
+			payload_tree_ad->source_id = my_id;
+			payload_tree_ad->tree_version = tree_version;
+			msg->header->length = sizeof(struct msg_tree_ad_payload);
+			msg->payload = payload_tree_ad;
+			break;
+		default:
+			break;
+	}
+}
+
+/**
+ * Sends a simple broadcast message of type @msg_type
+ */ 
+static void send_broadcast_msg(int msg_type) {
+	struct message *msg = (struct message *) malloc(sizeof(struct message));
+	char *encoded_msg;	
+	get_msg(msg, msg_type);
+	uint32_t len = encode_message(msg, &encoded_msg);
+	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
+	broadcast_send(&broadcast);
+	free(encoded_msg);
+	free_message(msg);
+}
+
+/*-----------------------------------------------------------------------------*/
 /* Callback function when a broadcast message is received */
 static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
@@ -75,7 +117,7 @@ static const struct broadcast_callbacks bc = {broadcast_recv};
 
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a unicast message is received */
-static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
+static void runicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
 	char *encoded_msg = packetbuf_dataptr();
 	struct message *decoded_msg;
@@ -106,7 +148,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 }
 
 // Set the function to be called when a broadcast message is received
-static const struct runicast_callbacks rc = {runicast_recv};
+static const struct unicast_callbacks rc = {unicast_recv};
 
 /*-----------------------------------------------------------------------------*/
 /* Process */
@@ -118,7 +160,7 @@ PROCESS_THREAD(my_process, ev, data)
 
 	PROCESS_BEGIN();
 
-	broadcast_open(&broadcast, 129, &broadcast_callbacks);
+	broadcast_open(&broadcast, 129, &bc);
 
 	while (1) {
 		// Every 25 to 35 seconds
@@ -140,11 +182,11 @@ PROCESS_THREAD(gateway_process, ev, data)
 {
 	static struct etimer et;
 
-	PROCESS_EXITHANDLER(runicast_close(&runicast);)
+	PROCESS_EXITHANDLER(unicast_close(&unicast);)
 
 	PROCESS_BEGIN();
 
-	runicast_open(&runicast, 146, &runicast_callbacks);
+	unicast_open(&unicast, 146, &rc);
 
 	while (1) {
 		// Every second
@@ -163,26 +205,26 @@ PROCESS_THREAD(gateway_process, ev, data)
 		msg->header = (struct msg_header *) malloc(sizeof(struct msg_header));
 		msg->header->version = version;
 		msg->header->msg_type = SENSOR_CONTROL;
-		msg->payload = (struct msg_control_payload *) malloc(sizeof(struct msg_control_payload)); 
+		struct msg_control_payload *payload = (struct msg_control_payload *) malloc(sizeof(struct msg_control_payload)); 
 		switch (cmd) {
 			case 0:
 				// Send data periodically / Send data on change
 				if (val == 1) {
 					// Send data periodically
-					msg->payload->command = 0x11;
+					payload->command = 0x11;
 				} else if (val == 0) {
 					// Send data on change
-					msg->payload->command = 0x10;
+					payload->command = 0x10;
 				}
 				break;
 			case 1:
 				// Send data / Don't send data
 				if (val == 1) {
 					// Send data
-					msg->payload->command = 0x21;
+					payload->command = 0x21;
 				} else if (val == 0) {
 					// Don't send data
-					msg->payload->command = 0x20;
+					payload->command = 0x20;
 				}
 				break;
 			default:
@@ -195,16 +237,26 @@ PROCESS_THREAD(gateway_process, ev, data)
 			// Send to all childs
 			struct node *current_child = childs;
 			while (current_child != NULL) {
-				msg->payload->destination_id = current_child->node_id;
+				payload->destination_id = current_child->node_id;
+				msg->payload = payload;
+				char *encoded_msg;
+				uint32_t len = encode_message(msg, &encoded_msg);
+				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 				runicast_send(&runicast, &(current_child->addr_via), 1);
 				current_child = current_child->next;
+				free(encoded_msg);
 			}
 		} else {
 			// Send to the child with id = dst
-			msg->payload->destination_id = dst;
+			payload->destination_id = dst;
+			msg->payload = payload;
 			struct node *child = get_node(childs, dst);
 			if (child != NULL) {
+				char *encoded_msg;
+				uint32_t len = encode_message(msg, &encoded_msg);
+				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 				runicast_send(&runicast, &(child->addr_via), 1);
+				free(encoded_msg);
 			}
 		}
 		free_message(msg);
