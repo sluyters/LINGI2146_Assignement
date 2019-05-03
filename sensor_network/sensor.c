@@ -320,6 +320,8 @@ PROCESS_THREAD(my_process, ev, data)
 	PROCESS_EXITHANDLER(broadcast_close(&broadcast);) 
 
 	PROCESS_BEGIN();
+	
+	clock_library_init();
 
 	broadcast_open(&broadcast, 129, &broadcast_callbacks);
 

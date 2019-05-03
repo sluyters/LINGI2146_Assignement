@@ -3,7 +3,6 @@
 #include "contiki-net.h"
 #include "dev/serial-line.h"
 
-#include <time.h>
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -162,6 +161,8 @@ PROCESS_THREAD(my_process, ev, data)
 	PROCESS_EXITHANDLER(broadcast_close(&broadcast);) 
 
 	PROCESS_BEGIN();
+	
+	clock_library_init();
 
 	broadcast_open(&broadcast, 129, &bc);
 

@@ -2,19 +2,24 @@
 #include "contiki-lib.h"
 #include "contiki-net.h"
 
-#include <time.h>
+//#include <time.h>
 #include <stdlib.h>
 
 #include "net/rime.h"	
+#include "sys/clock.h"
 
 struct node {
 	struct node *next;
 	rimeaddr_t addr_via;
 	uint8_t node_id;
 	uint8_t n_hops;
-	int timestamp;
+	unsigned long timestamp;
 };
 
+/**
+ * Initialises the clock library
+ */
+void clock_library_init(void);
 
 /**
  * Adds the new node to the @nodes list, or update its data if it is already present

@@ -1,5 +1,9 @@
 #include "node.h"
 
+void clock_library_init(void) {
+	clock_init();
+}
+
 /**
  * Adds the new node to the @nodes list, or update its data if it is already present
  */
@@ -11,12 +15,12 @@ void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t node_id, 
 		(*nodes)->node_id = node_id;
 		(*nodes)->next = NULL;
 		(*nodes)->n_hops = n_hops;
-		(*nodes)->timestamp = (int) time(NULL);
+		(*nodes)->timestamp = (unsigned long) clock_seconds();
 	} else if ((*nodes)->node_id == node_id && (*nodes)->next == NULL) {
 		// If the first node matches node_id and there is no other node, update it
 		(*nodes)->addr_via = *addr_via;			// Not sure
 		(*nodes)->n_hops = n_hops;
-		(*nodes)->timestamp = (int) time(NULL);
+		(*nodes)->timestamp = (unsigned long) clock_seconds();
 	} else {
 		// If the list is not empty, check each node until we reach the last node. If a match is found, remove it and add it to the end
 		struct node *current = *nodes;
@@ -44,7 +48,7 @@ void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t node_id, 
 		new_node->node_id = node_id;
 		new_node->next = NULL;
 		new_node->n_hops = n_hops;
-		new_node->timestamp = (int) time(NULL);
+		new_node->timestamp = (unsigned long) clock_seconds();
 	}
 }
 
@@ -79,7 +83,7 @@ void remove_node(struct node **nodes, uint8_t node_id) {
  * Removes all the expired nodes from @nodes
  */
 void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
-	int now = (int) time(NULL);
+	int now = (unsigned long) clock_seconds();
 	struct node *deleted_node;
 	while (*nodes != NULL && (now - (*nodes)->timestamp > max_elapsed_secs)) {
 		deleted_node = *nodes;
