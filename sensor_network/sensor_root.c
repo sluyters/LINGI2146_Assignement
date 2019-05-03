@@ -36,7 +36,7 @@ PROCESS(gateway_process, "Gateway process");
 AUTOSTART_PROCESSES(&my_process, &gateway_process);
 
 // TODO Prevent concurrent access issues
-// TODO Replace get_time by another function
+// TODO Fix memory leaks
 
 /*-----------------------------------------------------------------------------*/
 /* Helper funcions */
@@ -168,7 +168,7 @@ PROCESS_THREAD(my_process, ev, data)
 
 	while (1) {
 		// Every 25 to 35 seconds
-		etimer_set(&et, CLOCK_SECOND * 25 + random_rand() % (CLOCK_SECOND * 10));
+		etimer_set(&et, CLOCK_SECOND);
 
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
