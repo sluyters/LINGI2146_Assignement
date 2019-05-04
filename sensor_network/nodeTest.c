@@ -1,26 +1,40 @@
-#include "node.h"
+#include <stdlib.h>
+#include <stdint.h>
 
+//#include "node.h"
+
+/*
 void clock_library_init(void) {
 	clock_init();
-}
+}*/
+
+struct node {
+	struct node *next;
+	//rimeaddr_t addr_via;
+	uint8_t node_id;
+	uint8_t n_hops;
+	unsigned long timestamp;
+};
+
+struct node *childs;
 
 /**
  * Adds the new node to the @nodes list, or update its data if it is already present
  */
-void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t node_id, uint8_t n_hops) {
+void add_node(struct node **nodes, uint8_t node_id, uint8_t n_hops) {
 	if (*nodes == NULL) {
 		// If the list is empty, create a new node
 		*nodes = (struct node *) malloc(sizeof(struct node));
-		(*nodes)->addr_via = *addr_via;			// Not sure
+		//(*nodes)->addr_via = *addr_via;			// Not sure
 		(*nodes)->node_id = node_id;
 		(*nodes)->next = NULL;
 		(*nodes)->n_hops = n_hops;
-		(*nodes)->timestamp = (unsigned long) clock_seconds();
+		(*nodes)->timestamp = (unsigned long) n_hops;
 	} else if ((*nodes)->node_id == node_id && (*nodes)->next == NULL) {
 		// If the first node matches node_id and there is no other node, update it
-		(*nodes)->addr_via = *addr_via;			// Not sure
+		//(*nodes)->addr_via = *addr_via;			// Not sure
 		(*nodes)->n_hops = n_hops;
-		(*nodes)->timestamp = (unsigned long) clock_seconds();
+		(*nodes)->timestamp = (unsigned long) n_hops;
 	} else {
 		// If the list is not empty, check each node until we reach the last node. If a match is found, remove it and add it to the end
 		struct node *current = *nodes;
@@ -44,11 +58,11 @@ void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t node_id, 
 		}
 		// Add new node
 		struct node *new_node = (struct node *) malloc(sizeof(struct node));
-		new_node->addr_via = *addr_via;			// Not sure
+		//new_node->addr_via = *addr_via;			// Not sure
 		new_node->node_id = node_id;
 		new_node->next = NULL;
 		new_node->n_hops = n_hops;
-		new_node->timestamp = (unsigned long) clock_seconds();
+		new_node->timestamp = (unsigned long) n_hops;
 		previous->next = new_node;
 	}
 }
@@ -84,7 +98,7 @@ void remove_node(struct node **nodes, uint8_t node_id) {
  * Removes all the expired nodes from @nodes
  */
 void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
-	int now = (unsigned long) clock_seconds();
+	int now = 90;
 	struct node *deleted_node;
 	while (*nodes != NULL && (now - (*nodes)->timestamp > max_elapsed_secs)) {
 		deleted_node = *nodes;
@@ -105,4 +119,13 @@ struct node *get_node(struct node *nodes, uint8_t node_id) {
 		current = current->next;
 	}
 	return NULL;
+}
+
+int main (int argc, char *argv[]) {
+	int i;
+	for (i = 0; i < 10; i++) {
+		add_node(&childs, i, 40+i);
+	}
+
+	remove_expired_nodes(&childs, 46);
 }

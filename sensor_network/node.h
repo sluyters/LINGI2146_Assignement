@@ -4,6 +4,7 @@
 
 //#include <time.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #include "net/rime.h"	
 #include "sys/clock.h"
