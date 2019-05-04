@@ -150,7 +150,7 @@ static void send_unicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
 	free_message(msg);
 }
 
-// TODO from undeclared (line 433)
+
 static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t *from) {
 	// Check version, if version >= local version, process the TREE_ADVERTISEMENT message
 	struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) msg->payload;

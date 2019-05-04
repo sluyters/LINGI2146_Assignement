@@ -2,9 +2,9 @@
 #include "contiki-lib.h"
 #include "contiki-net.h"
 
-#include <time.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 //#define DEBUG DEBUG_PRINT
 
