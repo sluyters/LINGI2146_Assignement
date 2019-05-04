@@ -73,4 +73,6 @@ uint32_t encode_message(struct message *decoded_msg, char **encoded_msg);
 
 void decode_message(struct message **decoded_msg, char *encoded_msg, uint16_t msg_len); 
 
+struct message *copy_message(struct message *msg);
+
 void free_message(struct message *msg);

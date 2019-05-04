@@ -27,6 +27,7 @@ uint32_t encode_message(struct message *decoded_msg, char **encoded_msg) {
 	return length;
 }
 
+
 void decode_message(struct message **decoded_msg, char *encoded_msg, uint16_t msg_len) {
 	int offset = 0;
 	// Allocate memory for decoded message
@@ -91,6 +92,55 @@ void decode_message(struct message **decoded_msg, char *encoded_msg, uint16_t ms
     *decoded_msg = new_msg;
 }
 
+/**
+ * Copies the message @msg to a new message
+ */
+struct message *copy_message(struct message *msg) {
+	struct message *msg_copy = (struct message *) malloc(sizeof(struct message));
+	// Copy message header
+	msg_copy->header = (struct msg_header *) malloc(sizeof(struct msg_header));
+	memcpy((void *) msg_copy->header, (void *) msg->header, sizeof(struct msg_header));
+	// Copy message payload
+	switch (msg->header->msg_type)
+	{
+		case SENSOR_DATA:;
+			// Copy all payload data
+			struct msg_data_payload *current = (struct msg_data_payload *) msg->payload;
+			struct msg_data_payload *current_copy;
+			int iter = 0;
+			while (current != NULL) {
+				if (iter == 0) {
+					current_copy = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+					msg_copy->payload = current_copy;
+				} else {
+					current_copy->next = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+					current_copy = current_copy->next;
+				}
+				// Copy data header
+				current_copy->data_header = (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
+				memcpy((void *) current_copy->data_header, (void *) current->data_header, sizeof(struct msg_data_payload_h));
+				// Copy data
+				current_copy->data = (void *) malloc(current->data_header->length);
+				memcpy((void *) current_copy->data, (void *) current->data, current->data_header->length);
+				// Go to next payload 
+				current = current->next;
+				iter++;
+			}
+			current_copy->next = NULL;
+			break;
+	
+		default:;
+			msg_copy->payload = (struct msg_header *) malloc(msg->header->length);
+			memcpy((void *) msg_copy->payload, (void *) msg->payload, msg->header->length);
+			break;
+	}
+	return msg_copy;
+}
+
+
+/**
+ * Frees the memory used by @msg
+ */
 void free_message(struct message *msg) {
 	if (msg->payload != NULL) {
 		if (msg->header->msg_type == SENSOR_DATA) {
@@ -110,4 +160,5 @@ void free_message(struct message *msg) {
 	}
 	free(msg->header);
 	free(msg);
+	msg = NULL;
 }

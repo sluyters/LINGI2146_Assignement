@@ -67,16 +67,6 @@ static void send_aggregate_msg(void *ptr) {
 	data_aggregate_msg = NULL;
 }
 
-// Useless for now (perhaps useful later ?)
-/*
-static void send_to_childs(void *msg, int length) {
-	struct node *current = childs;
-	while (current != NULL) {
-		packetbuf_copyfrom(encoded_msg, length);	// Put data inside the packet
-		unicast_send(&unicast, &(current->addr_via)); 
-	}
-}
-*/
 
 /**
  * Initializes a simple message of type @msg_type
@@ -181,7 +171,7 @@ static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t 
 	}
 }
 
-
+// TODO Avoid free in this function (duplicate msg ?)
 static void handle_sensor_data_msg(struct message *msg) {
 	if (childs == NULL) {
 		// If no child, send data directly (no need to aggregate)
@@ -189,11 +179,10 @@ static void handle_sensor_data_msg(struct message *msg) {
 		uint32_t len = encode_message(msg, &encoded_msg);
 		packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 		unicast_send(&unicast, &(parent->addr_via));
-		free_message(msg);
 		free(encoded_msg);
 	} else if (data_aggregate_msg == NULL) {
 		// Store this message while waiting for other messages to aggregate + set timer
-		data_aggregate_msg = msg;
+		data_aggregate_msg = copy_message(msg);
 		ctimer_set(&aggregate_ctimer, CLOCK_SECOND * 30, send_aggregate_msg, NULL);
 	} else if (data_aggregate_msg->header->length + msg->header->length > 128) {
 		// If too many messages already aggregated, send old messages + save this one as new aggregated message
@@ -203,7 +192,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 		unicast_send(&unicast, &(parent->addr_via));
 		free_message(data_aggregate_msg);
 		free(encoded_msg);
-		data_aggregate_msg = msg;
+		data_aggregate_msg = copy_message(msg);
 		ctimer_reset(&aggregate_ctimer);
 	} else {
 		// Add to aggregated message payload
@@ -214,7 +203,6 @@ static void handle_sensor_data_msg(struct message *msg) {
 		current->next = msg->payload;
 		data_aggregate_msg->header->length += msg->header->length;
 		msg->payload = NULL; // Avoid conflits when freeing the message
-		free_message(msg);
 	}
 }
 
@@ -246,11 +234,11 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			break;
 		case TREE_ADVERTISEMENT:
 			handle_tree_advertisement_msg(decoded_msg, from);
-			free_message(decoded_msg);
 			break;
 		default:
 			break;
 	}
+	free_message(decoded_msg);
 }
 
 // Set the function to be called when a broadcast message is received
@@ -274,7 +262,6 @@ static void unicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
 				// Forward message to parent
 				packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
 				unicast_send(&unicast, &(parent->addr_via));
-				free_message(decoded_msg);
 			}
 			break;
 		case SENSOR_DATA:
@@ -298,14 +285,13 @@ static void unicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
 					unicast_send(&unicast, &(child->addr_via));
 				}
 			}
-			free_message(decoded_msg);
 			break;
 		case TREE_ADVERTISEMENT:
 			handle_tree_advertisement_msg(decoded_msg, from);
-			free_message(decoded_msg);
 		default:
 			break;
 	}
+	free_message(decoded_msg);
 }
 
 // Set the function to be called when a broadcast message is received
@@ -386,6 +372,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 				msg->payload = payload;
 
 				handle_sensor_data_msg(msg);
+				free_message(msg);
 			}
 			last_data = data;
 		}
