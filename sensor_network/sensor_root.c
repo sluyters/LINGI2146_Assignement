@@ -14,11 +14,12 @@
 
 /*-----------------------------------------------------------------------------*/
 /* Configuration values */
-const uint16_t unicast_channel = 142;
+const uint16_t runicast_channel = 142;
 const uint16_t broadcast_channel = 169;
 const uint8_t version = 1;
+const int n_retransmissions = 3;
 
-struct unicast_conn unicast;
+struct runicast_conn runicast;
 struct broadcast_conn broadcast;
 
 /*-----------------------------------------------------------------------------*/
@@ -107,7 +108,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			char *encoded_msg;
 			uint32_t len = encode_message(&msg, &encoded_msg);
 			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-			unicast_send(&unicast, from);	
+			runicast_send(&runicast, from, n_retransmissions);	
 			break;
 		default:
 			break;
@@ -118,8 +119,8 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 static const struct broadcast_callbacks bc = {broadcast_recv};
 
 /*-----------------------------------------------------------------------------*/
-/* Callback function when a unicast message is received */
-static void unicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
+/* Callback function when a runicast message is received */
+static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
 	// Decode the message
 	char *encoded_msg = packetbuf_dataptr();
 	struct message *decoded_msg;
@@ -150,7 +151,7 @@ static void unicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
 }
 
 // Set the function to be called when a broadcast message is received
-static const struct unicast_callbacks rc = {unicast_recv};
+static const struct runicast_callbacks rc = {runicast_recv};
 
 /*-----------------------------------------------------------------------------*/
 /* Process */
@@ -185,11 +186,11 @@ PROCESS_THREAD(my_process, ev, data)
 
 PROCESS_THREAD(gateway_process, ev, data)
 {
-	PROCESS_EXITHANDLER(unicast_close(&unicast);)
+	PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
 	PROCESS_BEGIN();
 
-	unicast_open(&unicast, 146, &rc);
+	runicast_open(&runicast, 146, &rc);
 
 	for (;;) {
 	
@@ -264,7 +265,7 @@ PROCESS_THREAD(gateway_process, ev, data)
 					char *encoded_msg;
 					uint32_t len = encode_message(msg, &encoded_msg);
 					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-					unicast_send(&unicast, &(current_child->addr_via));
+					runicast_send(&runicast, &(current_child->addr_via), n_retransmissions);
 					current_child = current_child->next;
 					free(encoded_msg);
 				}
@@ -277,7 +278,7 @@ PROCESS_THREAD(gateway_process, ev, data)
 					char *encoded_msg;
 					uint32_t len = encode_message(msg, &encoded_msg);
 					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-					unicast_send(&unicast, &(child->addr_via));
+					runicast_send(&runicast, &(child->addr_via), n_retransmissions);
 					free(encoded_msg);
 				}
 			}
