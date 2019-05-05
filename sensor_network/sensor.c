@@ -6,9 +6,12 @@
 #include "contiki-lib.h"
 #include "contiki-net.h"
 
+#include "node-id.h"
+
 #include <time.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "message.h"
 #include "node.h"
@@ -142,11 +145,12 @@ static void send_unicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
 
 
 static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t *from) {
-	// Check version, if version >= local version, process the TREE_ADVERTISEMENT message
+	// Check version, if version >= local version, process the TREE_ADVERTISEMENT message, don't accept TREE_ADVERTISEMENT with same tree_version if the tree is not stable
 	struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) msg->payload;
-	if (payload->tree_version >= tree_version || tree_version - payload->tree_version > 245) {
+	if ((payload->tree_version > tree_version) || ((tree_version - payload->tree_version) > 245) || ((payload->tree_version == tree_version) && tree_stable)) {
 		// Check if new neighbor is better than current parent (automatically better if tree version is greater)
-		if ((payload->tree_version > tree_version || tree_version - payload->tree_version > 245) || ((parent == NULL || payload->n_hops < parent->n_hops) && get_node(childs, payload->source_id) == NULL)) {
+		if ((payload->tree_version > tree_version || tree_version - payload->tree_version > 245) || ((parent == NULL || (payload->n_hops + 1) < parent->n_hops) && get_node(childs, payload->source_id) == NULL)) {
+			printf("Received TREE_AD (broadcast) 1\n");
 			if (parent != NULL) {
 				remove_node(&parent, parent->node_id);
 			}
@@ -160,18 +164,23 @@ static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t 
 			tree_version = payload->tree_version;
 			tree_stable = 1;
 		} else if (parent->node_id == payload->source_id)	{
+			printf("Received TREE_AD (broadcast) 2\n");
+			// Don't send TREE_ADVERTISEMENT if no relevant information update
+			if ((tree_version != payload->tree_version) || (payload->n_hops + 1 != parent->n_hops)) {
+				// Broadcast the new tree
+				send_broadcast_msg(TREE_ADVERTISEMENT);
+				// Update tree version + consider the tree as stable
+				tree_version = payload->tree_version;
+			}
 			// Update the informations of the parent
 			add_node(&parent, from, payload->source_id, payload->n_hops + 1);
-			// Broadcast the new tree
-			send_broadcast_msg(TREE_ADVERTISEMENT);
-			// Update tree version + consider the tree as stable
-			tree_version = payload->tree_version;
+			// Consider the tree as stable
 			tree_stable = 1;
 		}
 	}
 }
 
-// TODO Avoid free in this function (duplicate msg ?)
+
 static void handle_sensor_data_msg(struct message *msg) {
 	if (childs == NULL) {
 		// If no child, send data directly (no need to aggregate)
@@ -216,6 +225,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	
 	switch (decoded_msg->header->msg_type) {
 		case TREE_INFORMATION_REQUEST:;
+			printf("Received TREE_INFO_REQ (broadcast)\n");
 			struct msg_tree_request_payload *payload_info_req = (struct msg_tree_request_payload *) decoded_msg->payload;
 			// If the tree needs rebuilding
 			if ((payload_info_req->request_attributes & 0x1) == 0x1) {
@@ -227,12 +237,14 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 				}
 			} else {
 				if (parent != NULL && payload_info_req->tree_version <= tree_version) {
-					// Send TREE_ADVERTISEMENT response
-					send_unicast_msg(TREE_ADVERTISEMENT, from);
+					// Send TREE_ADVERTISEMENT response TODO modify (why doesn't respond with unicast ?)
+					send_broadcast_msg(TREE_ADVERTISEMENT);
+					//send_unicast_msg(TREE_ADVERTISEMENT, from);
 				}
 			}
 			break;
 		case TREE_ADVERTISEMENT:
+			printf("Received TREE_AD (broadcast)\n");
 			handle_tree_advertisement_msg(decoded_msg, from);
 			break;
 		default:
@@ -254,6 +266,7 @@ static void unicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
 
 	switch (decoded_msg->header->msg_type) {
 		case DESTINATION_ADVERTISEMENT:;
+			printf("Received DEST_AD (unicast)\n");
 			struct msg_dest_ad_payload *payload_dest_ad = (struct msg_dest_ad_payload *) decoded_msg->payload;
 			// Discard if version < local version
 			if (payload_dest_ad->tree_version >= tree_version) {
@@ -265,9 +278,11 @@ static void unicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
 			}
 			break;
 		case SENSOR_DATA:
+			printf("Received SENSOR_DATA (unicast)\n");
 			handle_sensor_data_msg(decoded_msg);
 			break;
 		case SENSOR_CONTROL:;
+			printf("Received SENSOR_CONTROL (unicast)\n");
 			struct msg_control_payload *payload_ctrl = (struct msg_control_payload *) decoded_msg->payload;
 			// Check if message is destined to this sensor
 			if (my_id == payload_ctrl->destination_id) {
@@ -287,6 +302,7 @@ static void unicast_recv(struct unicast_conn *c, const rimeaddr_t *from) {
 			}
 			break;
 		case TREE_ADVERTISEMENT:
+			printf("Received TREE_AD (unicast)\n");
 			handle_tree_advertisement_msg(decoded_msg, from);
 		default:
 			break;
@@ -308,8 +324,9 @@ PROCESS_THREAD(my_process, ev, data)
 	PROCESS_BEGIN();
 	
 	clock_library_init();
+	random_init(node_id);
 	
-	my_id = random_rand() % 100 + 1;
+	my_id = node_id;
 	
 	broadcast_open(&broadcast, 129, &broadcast_callbacks);
 
