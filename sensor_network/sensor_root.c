@@ -176,7 +176,8 @@ PROCESS_THREAD(my_process, ev, data)
 		send_broadcast_msg(TREE_ADVERTISEMENT);
 
 		// Remove childs that have not sent any message since a long time (more than 240 seconds)
-		remove_expired_nodes(&childs, 240);
+		//remove_expired_nodes(&childs, 240);
+		remove_expired_nodes(&childs, 25);
 	}
 
 	PROCESS_END();
