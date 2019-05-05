@@ -92,8 +92,10 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	switch (decoded_msg->header->msg_type) {
 		case TREE_INFORMATION_REQUEST:;
 			// If the tree needs rebuilding, increment the tree version 
+			printf("Received TREE_INFO_REQ\n");
 			struct msg_tree_request_payload *payload_info_req = (struct msg_tree_request_payload *) decoded_msg->payload;
-			if ((payload_info_req->request_attributes & 0x1) == 0x1 && payload_info_req->tree_version == tree_version) {
+			if (((payload_info_req->request_attributes & 0x1) == 0x1) && (payload_info_req->tree_version == tree_version)) {
+				printf("Received TREE_INFO_REQ (version increase)\n");
 				tree_version++;
 			}
 				
@@ -120,7 +122,7 @@ static const struct broadcast_callbacks bc = {broadcast_recv};
 
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a runicast message is received */
-static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from) {
+static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from, uint8_t seqno) {
 	// Decode the message
 	char *encoded_msg = packetbuf_dataptr();
 	struct message *decoded_msg;
@@ -167,10 +169,10 @@ PROCESS_THREAD(my_process, ev, data)
 
 	broadcast_open(&broadcast, 129, &bc);
 
+	// Every 25 to 35 seconds
+	//etimer_set(&et, CLOCK_SECOND * 25 + random_rand() % (CLOCK_SECOND * 10));
+	etimer_set(&et, CLOCK_SECOND * 1 + random_rand() % (CLOCK_SECOND * 2));
 	while (1) {
-		// Every 25 to 35 seconds
-		etimer_set(&et, CLOCK_SECOND);
-
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
 		// Advertise the tree (broadcast a TREE_ADVERTISEMENT)
@@ -179,6 +181,8 @@ PROCESS_THREAD(my_process, ev, data)
 		// Remove childs that have not sent any message since a long time (more than 240 seconds)
 		//remove_expired_nodes(&childs, 240);
 		remove_expired_nodes(&childs, 25);
+		
+		etimer_reset(&et);
 	}
 
 	PROCESS_END();
