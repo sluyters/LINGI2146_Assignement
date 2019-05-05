@@ -238,8 +238,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			} else {
 				if (parent != NULL && payload_info_req->tree_version <= tree_version) {
 					// Send TREE_ADVERTISEMENT response TODO modify (why doesn't respond with unicast ?)
-					send_broadcast_msg(TREE_ADVERTISEMENT);
-					//send_unicast_msg(TREE_ADVERTISEMENT, from);
+					send_unicast_msg(TREE_ADVERTISEMENT, from);
 				}
 			}
 			break;
