@@ -11,14 +11,14 @@ void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t node_id, 
 	if (*nodes == NULL) {
 		// If the list is empty, create a new node
 		*nodes = (struct node *) malloc(sizeof(struct node));
-		(*nodes)->addr_via = *addr_via;			// Not sure
+		rimeaddr_copy(&((*nodes)->addr_via), addr_via);
 		(*nodes)->node_id = node_id;
 		(*nodes)->next = NULL;
 		(*nodes)->n_hops = n_hops;
 		(*nodes)->timestamp = (unsigned long) clock_seconds();
 	} else if ((*nodes)->node_id == node_id && (*nodes)->next == NULL) {
 		// If the first node matches node_id and there is no other node, update it
-		(*nodes)->addr_via = *addr_via;			// Not sure
+		rimeaddr_copy(&((*nodes)->addr_via), addr_via);
 		(*nodes)->n_hops = n_hops;
 		(*nodes)->timestamp = (unsigned long) clock_seconds();
 	} else {
@@ -44,7 +44,7 @@ void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t node_id, 
 		}
 		// Add new node
 		struct node *new_node = (struct node *) malloc(sizeof(struct node));
-		new_node->addr_via = *addr_via;			// Not sure
+		rimeaddr_copy(&(new_node->addr_via), addr_via);
 		new_node->node_id = node_id;
 		new_node->next = NULL;
 		new_node->n_hops = n_hops;
