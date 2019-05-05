@@ -150,7 +150,7 @@ static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t 
 	if ((payload->tree_version > tree_version) || ((tree_version - payload->tree_version) > 245) || ((payload->tree_version == tree_version) && tree_stable)) {
 		// Check if new neighbor is better than current parent (automatically better if tree version is greater)
 		if ((payload->tree_version > tree_version || tree_version - payload->tree_version > 245) || ((parent == NULL || (payload->n_hops + 1) < parent->n_hops) && get_node(childs, payload->source_id) == NULL)) {
-			printf("Received TREE_AD (broadcast) 1\n");
+			//printf("Received TREE_AD (broadcast) 1\n");
 			if (parent != NULL) {
 				remove_node(&parent, parent->node_id);
 			}
@@ -164,7 +164,7 @@ static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t 
 			tree_version = payload->tree_version;
 			tree_stable = 1;
 		} else if (parent->node_id == payload->source_id)	{
-			printf("Received TREE_AD (broadcast) 2\n");
+			//printf("Received TREE_AD (broadcast) 2\n");
 			// Don't send TREE_ADVERTISEMENT if no relevant information update
 			if ((tree_version != payload->tree_version) || (payload->n_hops + 1 != parent->n_hops)) {
 				// Broadcast the new tree
