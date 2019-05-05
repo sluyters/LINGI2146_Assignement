@@ -332,12 +332,12 @@ PROCESS_THREAD(my_process, ev, data)
 	while (1) {
 		// Every 25 to 35 seconds
 		//etimer_set(&et, CLOCK_SECOND * 25 + random_rand() % (CLOCK_SECOND * 10));
-		etimer_set(&et, CLOCK_SECOND * 2 + random_rand() % (CLOCK_SECOND * 2));
+		etimer_set(&et, CLOCK_SECOND * 10 + random_rand() % (CLOCK_SECOND * 5));
 
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
 		//remove_expired_nodes(&parent, 90);
-		remove_expired_nodes(&parent, 10);
+		remove_expired_nodes(&parent, 45);
 		if (parent == NULL) {
 			tree_stable = 0;
 			// Broadcast a TREE_INFORMATION_REQUEST
@@ -349,7 +349,7 @@ PROCESS_THREAD(my_process, ev, data)
 
 		// Remove childs that have not sent any message since a long time (more than 240 seconds)
 		//remove_expired_nodes(&childs, 240);
-		remove_expired_nodes(&childs, 25);
+		remove_expired_nodes(&childs, 90);
 	}
 
 	PROCESS_END();
@@ -371,7 +371,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 		iter += 1;
 		// Every 20 to 40 seconds
 		//etimer_set(&et, CLOCK_SECOND * 20 + random_rand() % (CLOCK_SECOND * 20));
-		etimer_set(&et, CLOCK_SECOND * 3 + random_rand() % (CLOCK_SECOND * 2));
+		etimer_set(&et, CLOCK_SECOND * 8 + random_rand() % (CLOCK_SECOND * 8));
 
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
