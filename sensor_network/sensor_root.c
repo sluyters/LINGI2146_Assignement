@@ -17,7 +17,7 @@
 const uint16_t runicast_channel = 142;
 const uint16_t broadcast_channel = 169;
 const uint8_t version = 1;
-const int n_retransmissions = 3;
+const int n_retransmissions = 1;
 
 struct runicast_conn runicast;
 struct broadcast_conn broadcast;

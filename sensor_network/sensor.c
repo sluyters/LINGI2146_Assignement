@@ -25,15 +25,15 @@
 const uint16_t runicast_channel = 142;
 const uint16_t broadcast_channel = 169;
 const uint8_t version = 1;
-const int n_retransmissions = 3;
+const int n_retransmissions = 1;
 
 struct runicast_conn runicast;
 struct broadcast_conn broadcast;
 
 /*-----------------------------------------------------------------------------*/
 /* Sensor settings */
-int send_data = 0; // By default, don't send data
-int send_periodically = 0; // By default, send data only when there is a change (not periodically)
+int send_data = 1; // By default, don't send data
+int send_periodically = 1; // By default, send data only when there is a change (not periodically)
 
 /*-----------------------------------------------------------------------------*/
 /* Save parent + child nodes */
@@ -72,6 +72,10 @@ static void send_aggregate_msg(void *ptr) {
 }
 
 // TODO problem with runicast transmitting while trying to send other things -> create a list of messages to send, and send them from one process ?
+
+// TODO Fix bug (illegal read - out of bounds) that occurs when encoding a data message (sensor_process->handle_sensor_data_msg->encode_message) --> perhaps due to erased variables when the process is pre-empted ?)
+
+// TODO fix bug where the correct data is not correctly sent / aggregated / transmitted and results in corrupted data at the root node
 
 /**
  * Initializes a simple message of type @msg_type
@@ -186,6 +190,8 @@ static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t 
 
 static void handle_sensor_data_msg(struct message *msg) {
 	if (childs == NULL) {
+		// TODO why no child ?
+		printf("Transfer data - No childs\n");
 		// If no child, send data directly (no need to aggregate)
 		char *encoded_msg;
 		uint32_t len = encode_message(msg, &encoded_msg);
@@ -193,10 +199,12 @@ static void handle_sensor_data_msg(struct message *msg) {
 		runicast_send(&runicast, &(parent->addr_via), n_retransmissions);
 		free(encoded_msg);
 	} else if (data_aggregate_msg == NULL) {
+		printf("Transfer data - Aggregatefirst\n");
 		// Store this message while waiting for other messages to aggregate + set timer
 		data_aggregate_msg = copy_message(msg);
 		ctimer_set(&aggregate_ctimer, CLOCK_SECOND * 30, send_aggregate_msg, NULL);
 	} else if (data_aggregate_msg->header->length + msg->header->length > 128) {
+		printf("Transfer data - Aggregatetoomany\n");
 		// If too many messages already aggregated, send old messages + save this one as new aggregated message
 		char *encoded_msg;
 		uint32_t len = encode_message(data_aggregate_msg, &encoded_msg);
@@ -207,6 +215,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 		data_aggregate_msg = copy_message(msg);
 		ctimer_reset(&aggregate_ctimer);
 	} else {
+		printf("Transfer data - Aggregateadd\n");
 		// Add to aggregated message payload
 		struct msg_data_payload *current = data_aggregate_msg->payload;
 		while (current->next != NULL) {
@@ -376,6 +385,7 @@ PROCESS_THREAD(sensor_process, ev, data)
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
 		if (send_data && (parent != NULL)) {
+			printf("Sending data\n");
 			// TODO generate random sensor data
 			int data = 69; // Sensor value
 
