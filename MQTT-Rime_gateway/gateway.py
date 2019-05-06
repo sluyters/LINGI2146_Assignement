@@ -93,5 +93,8 @@ def main():
     threading.Thread(target=handle_cmd, args=(p)).start()
     threading.Thread(target=sensors_interface, args=(client, p)).start()
 
+    # Start the loop, to process the callbacks
+    client.loop_forever()
+
 if __name__ == '__main__':
     main()
