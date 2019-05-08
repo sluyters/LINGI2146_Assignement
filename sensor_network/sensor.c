@@ -73,8 +73,6 @@ static void send_aggregate_msg(void *ptr) {
 
 // TODO problem with runicast transmitting while trying to send other things -> create a list of messages to send, and send them from one process ?
 
-// TODO Fix bug (illegal read - out of bounds) that occurs when encoding a data message (sensor_process->handle_sensor_data_msg->encode_message) --> perhaps due to erased variables when the process is pre-empted ?)
-
 // TODO fix bug where the correct data is not correctly sent / aggregated / transmitted and results in corrupted data at the root node
 
 /**
@@ -246,7 +244,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 				packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
 				broadcast_send(&broadcast);
 			} else if ((parent != NULL) && (payload_info_req->tree_version <= tree_version)) {
-				// Send TREE_ADVERTISEMENT response TODO modify (why doesn't respond with runicast ?)
+				// Send TREE_ADVERTISEMENT response
 				send_runicast_msg(TREE_ADVERTISEMENT, from);
 			}
 			break;
@@ -280,7 +278,6 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from, uint8
 				add_node(&childs, from, payload_dest_ad->source_id, 0);
 				// Forward message to parent
 				packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
-				// TODO why does it fail to send ?
 				int ret = runicast_send(&runicast, &(parent->addr_via), n_retransmissions);
 				printf("Received DEST_AD (forwarded) TreeV:%d Src:%d Ret:%d\n", payload_dest_ad->tree_version, payload_dest_ad->source_id, ret);
 			}
@@ -414,7 +411,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 		}
 
 		// Send DESTINATION_ADVERTISEMENT to indicate that this node is still up (every 120 seconds)
-		if ((iter % 4 == 0) && (parent != NULL)) {
+		if ((iter % 2 == 0) && (parent != NULL)) {
 			send_runicast_msg(DESTINATION_ADVERTISEMENT, &(parent->addr_via));
 		}
 		etimer_reset(&et);
