@@ -390,7 +390,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 			data = 69; // Sensor value
 
 			// Send data
-			if (send_periodically || (data != last_data)) {
+			if ((iter % 2 == 0) && (send_periodically || (data != last_data))) {
 				msg = (struct message *) malloc(sizeof(struct message));	
 				get_msg(msg, SENSOR_DATA);
 				payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
@@ -411,7 +411,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 		}
 
 		// Send DESTINATION_ADVERTISEMENT to indicate that this node is still up (every 120 seconds)
-		if ((iter % 2 == 0) && (parent != NULL)) {
+		if ((iter % 4 == 1) && (parent != NULL)) {
 			send_runicast_msg(DESTINATION_ADVERTISEMENT, &(parent->addr_via));
 		}
 		etimer_reset(&et);
