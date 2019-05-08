@@ -405,6 +405,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 				memcpy(payload->data, &data, sizeof(int));
 				msg->header->length = sizeof(struct msg_data_payload_h) + sizeof(int);
 				msg->payload = payload;
+				msg->payload->next = NULL;
 
 				handle_sensor_data_msg(msg);	// TODO Conflict risk
 				free_message(msg);
