@@ -345,7 +345,7 @@ PROCESS_THREAD(my_process, ev, data)
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
 		//remove_expired_nodes(&parent, 90);
-		remove_expired_nodes(&parent, 45);
+		remove_expired_nodes(&parent, 45); // TODO Conflict risk
 		if (parent == NULL) {
 			tree_stable = 0;
 			// Broadcast a TREE_INFORMATION_REQUEST
@@ -357,7 +357,7 @@ PROCESS_THREAD(my_process, ev, data)
 
 		// Remove childs that have not sent any message since a long time (more than 240 seconds)
 		//remove_expired_nodes(&childs, 240);
-		remove_expired_nodes(&childs, 90);
+		remove_expired_nodes(&childs, 90);	// TODO Conflict risk
 		
 		etimer_reset(&et);
 	}
@@ -366,6 +366,9 @@ PROCESS_THREAD(my_process, ev, data)
 }
 uint8_t iter = 0;
 int last_data = -1;
+int data;
+struct message *msg;
+struct msg_data_payload *payload ;
 PROCESS_THREAD(sensor_process, ev, data)
 {
 	static struct etimer et;
@@ -387,13 +390,13 @@ PROCESS_THREAD(sensor_process, ev, data)
 		if (send_data && (parent != NULL)) {
 			printf("Sending data\n");
 			// TODO generate random sensor data
-			int data = 69; // Sensor value
+			data = 69; // Sensor value
 
 			// Send data
 			if (send_periodically || (data != last_data)) {
-				struct message *msg = (struct message *) malloc(sizeof(struct message));	
+				msg = (struct message *) malloc(sizeof(struct message));	
 				get_msg(msg, SENSOR_DATA);
-				struct msg_data_payload *payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
+				payload = (struct msg_data_payload *) malloc(sizeof(struct msg_data_payload));
 				payload->data_header =  (struct msg_data_payload_h *) malloc(sizeof(struct msg_data_payload_h));
 				payload->data_header->source_id = my_id;
 				payload->data_header->subject_id = my_subject_id;
@@ -403,7 +406,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 				msg->header->length = sizeof(struct msg_data_payload_h) + sizeof(int);
 				msg->payload = payload;
 
-				handle_sensor_data_msg(msg);
+				handle_sensor_data_msg(msg);	// TODO Conflict risk
 				free_message(msg);
 			}
 			last_data = data;
