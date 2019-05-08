@@ -403,9 +403,9 @@ PROCESS_THREAD(sensor_process, ev, data)
 				payload->data_header->length = sizeof(int);
 				payload->data = malloc(sizeof(int));
 				memcpy(payload->data, &data, sizeof(int));
+				payload->next = NULL;
 				msg->header->length = sizeof(struct msg_data_payload_h) + sizeof(int);
 				msg->payload = payload;
-				msg->payload->next = NULL;
 
 				handle_sensor_data_msg(msg);	// TODO Conflict risk
 				free_message(msg);
