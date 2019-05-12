@@ -171,7 +171,7 @@ PROCESS_THREAD(my_process, ev, data)
 
 	// Every 25 to 35 seconds
 	//etimer_set(&et, CLOCK_SECOND * 25 + random_rand() % (CLOCK_SECOND * 10));
-	etimer_set(&et, CLOCK_SECOND * 1 + random_rand() % (CLOCK_SECOND * 2));
+	etimer_set(&et, CLOCK_SECOND * 5 + random_rand() % (CLOCK_SECOND * 5));
 	while (1) {
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
@@ -180,7 +180,7 @@ PROCESS_THREAD(my_process, ev, data)
 
 		// Remove childs that have not sent any message since a long time (more than 240 seconds)
 		//remove_expired_nodes(&childs, 240);
-		remove_expired_nodes(&childs, 25);
+		remove_expired_nodes(&childs, 50);
 		
 		etimer_reset(&et);
 	}
@@ -232,6 +232,7 @@ PROCESS_THREAD(gateway_process, ev, data)
 			msg->header = (struct msg_header *) malloc(sizeof(struct msg_header));
 			msg->header->version = version;
 			msg->header->msg_type = SENSOR_CONTROL;
+			msg->header->length = sizeof(struct msg_control_payload);
 			struct msg_control_payload *payload = (struct msg_control_payload *) malloc(sizeof(struct msg_control_payload)); 
 			switch (cmd) {
 				case 0:
@@ -257,25 +258,19 @@ PROCESS_THREAD(gateway_process, ev, data)
 				default:
 					break;
 			}
-			char *encoded_msg;
-			uint32_t len = encode_message(msg, &encoded_msg);
-			packetbuf_copyfrom(encoded_msg, len);
+			
 			if (dst < 0) {
 				// Send to all childs
-				struct node *current_child = childs;
-				while (current_child != NULL) {
-					payload->destination_id = current_child->node_id;
-					msg->payload = payload;
-					char *encoded_msg;
-					uint32_t len = encode_message(msg, &encoded_msg);
-					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-					runicast_send(&runicast, &(current_child->addr_via), n_retransmissions);
-					current_child = current_child->next;
-					free(encoded_msg);
-				}
+				payload->destination_id = 0; // When broadcasted, the destination_id becomes the number of hops of the packet
+				msg->payload = payload;
+				char *encoded_msg;
+				uint32_t len = encode_message(msg, &encoded_msg);
+				packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
+				broadcast_send(&broadcast);
+				free(encoded_msg);
 			} else {
 				// Send to the child with id = dst
-				payload->destination_id = dst;
+				payload->destination_id = dst; // When broadcasted, the destination_id becomes the number of hops of the packet
 				msg->payload = payload;
 				struct node *child = get_node(childs, dst);
 				if (child != NULL) {

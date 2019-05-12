@@ -187,6 +187,13 @@ static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t 
 
 
 static void handle_sensor_data_msg(struct message *msg) {
+
+	struct msg_data_payload *d_payload = (struct msg_data_payload *) msg->payload;
+	while (d_payload != NULL) {
+		printf("Data %d %d %s\n", d_payload->data_header->source_id, d_payload->data_header->subject_id, (char *) d_payload->data);
+		d_payload = d_payload->next;
+	}
+	
 	if (childs == NULL) {
 		// TODO why no child ?
 		printf("Transfer data - No childs\n");
@@ -251,6 +258,27 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 		case TREE_ADVERTISEMENT:
 			handle_tree_advertisement_msg(decoded_msg, from);
 			break;
+		case SENSOR_CONTROL:;
+			printf("Received SENSOR_CONTROL (broadcast)\n");
+			struct msg_control_payload *payload_ctrl = (struct msg_control_payload *) decoded_msg->payload;
+			// Check if message is destined to this sensor
+			if ((parent != NULL) && (payload_ctrl->destination_id < parent->n_hops)) {
+				// Adapt sensor setting
+				if ((payload_ctrl->command & ~0x1) == 0x10) {
+					send_periodically = payload_ctrl->command & 0x1;
+				} else if ((payload_ctrl->command & ~0x1) == 0x20) {
+					send_data = payload_ctrl->command & 0x1;
+				}
+				payload_ctrl->destination_id += 1; 
+				// Forward control message to childs
+				if (childs != NULL) {
+					char *encoded_msg2;	
+					uint32_t len = encode_message(decoded_msg, &encoded_msg2);
+					packetbuf_copyfrom(encoded_msg2, len);
+					broadcast_send(&broadcast);
+					free(encoded_msg2);
+				}
+			}
 		default:
 			break;
 	}
