@@ -196,7 +196,7 @@ PROCESS_THREAD(gateway_process, ev, data)
 
 	runicast_open(&runicast, 146, &rc);
 
-	for (;;) {
+	while (1) {
 	
 		PROCESS_YIELD();
 		

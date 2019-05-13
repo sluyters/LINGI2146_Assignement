@@ -4,6 +4,7 @@ import threading
 import time
 import paho.mqtt.client as mqtt
 import subprocess
+import argparse
 
 # ("subject name", list of sensors, list of receivers)
 topicdict = {
@@ -34,16 +35,15 @@ def handle_cmd(communication_process):
         print(cmd)
         # Send command to the root node (cmd val dst)
         if cmd.upper() == "SEND PERIODICALLY":
-            communication_process.stdin.write("0 1 -1")
+            communication_process.stdin.write("0 1 -1\n")
         elif cmd.upper() == "SEND ON CHANGE":
-            communication_process.stdin.write("0 0 -1")
+            communication_process.stdin.write("0 0 -1\n")
         else:
             print("Unknown command. Try typing SEND PERIODICALLY or SEND ON CHANGE")
 
 def sensors_interface(mqttc, communication_process):
     # Start serialdump tool, read each line
     for line in communication_process.stdout:
-        print(line, end='')
         data = line.split()
         if data[0] == "PUBLISH":
             sensor_id = int(data[1])
@@ -54,7 +54,7 @@ def sensors_interface(mqttc, communication_process):
                 topicdict[subject_id][1].append(sensor_id)
             # If no subscriber, send a control message to stop sending data, else publish data
             if len(topicdict[subject_id][2]) == 0:
-                communication_process.stdin.write("1 0 {:d}".format(sensor_id))
+                communication_process.stdin.write("1 0 {:d}\n".format(sensor_id))
             else:
                 mqttc.publish(topicdict[subject_id][0], payload=msg_content, qos=0, retain=False)
         elif data[0] == "ADVERTISE":
@@ -65,34 +65,45 @@ def sensors_interface(mqttc, communication_process):
                 topicdict[subject_id][1].append(sensor_id)
                 # If no subscriber, send a control message to stop sending data
                 if len(topicdict[subject_id][2]) == 0:
-                    communication_process.stdin.write("1 0 {:d}".format(sensor_id))
+                    communication_process.stdin.write("1 0 {:d}\n".format(sensor_id))
     communication_process.terminate()
 
 def main():
+    # Get hostname and serial device from arguments
+    # Describe arguments for -help command
+    parser = argparse.ArgumentParser(description="MQTT-Rime gateway")
+    parser.add_argument("serialdevice", metavar="SERIALDEVICE", type=str, help="path of the serial device (e.g. '/dev/pts/1')")
+    parser.add_argument("host", metavar="HOST", type=str, help="hostname or IP address of the broker")
+
+    # Retrieve arguments
+    args = parser.parse_args()
+    
+    # Serial device (to connect with the root node)
+    serialdevice = args.serialdevice
+    
     # Hostname or IP address of the remote broker
-    host = "lol.com"             
+    host = args.host            
     
     # Initialise client
-    client = mqtt.Client()
-
+    client = mqtt.Client("Gateway")
+    
     # Set callback function
     client.on_connect = on_connect_callback
     client.on_message=on_message_callback
 
     # Connect to the broker
     client.connect(host, port=1883, keepalive=60, bind_address="")
-
+    print("ok2")
     # Subscribe to logs of subscribe/unsubscribe actions
     client.subscribe("$SYS/broker/log/M/subscribe")
     client.subscribe("$SYS/broker/log/M/unsubscribe")
 
     # Launch the serialdump tool for communication with the root node
-    p = subprocess.Popen(["../../tools/sky/serialdump-linux", "-b115200", "/dev/ttyUSB0"], stdout=subprocess.PIPE, stdin=subprocess.PIPE, bufsize=1, universal_newlines=True)
+    p = subprocess.Popen(["../../tools/sky/serialdump-linux", "-b115200", serialdevice], stdout=subprocess.PIPE, stdin=subprocess.PIPE, bufsize=1, universal_newlines=True)
 
     # Launch threads to handle commands and messages from the root node
-    threading.Thread(target=handle_cmd, args=(p)).start()
+    threading.Thread(target=handle_cmd, args=(p,)).start()
     threading.Thread(target=sensors_interface, args=(client, p)).start()
-
     # Start the loop, to process the callbacks
     client.loop_forever()
 
