@@ -141,8 +141,6 @@ static void send_runicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
 	char *encoded_msg;	
 	get_msg(msg, msg_type);
 	uint32_t len = encode_message(msg, &encoded_msg);
-	int ret = 0;
-	uint8_t iter = 0;
 	packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 	runicast_send(&runicast, addr_dest, n_retransmissions);
 	free(encoded_msg);
@@ -177,6 +175,8 @@ static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t 
 				// Update tree version + consider the tree as stable
 				tree_version = payload->tree_version;
 			}
+			//TODO Move this fucking shit upstair
+
 			// Update the informations of the parent
 			add_node(&parent, from, payload->source_id, payload->n_hops + 1);
 			// Consider the tree as stable
