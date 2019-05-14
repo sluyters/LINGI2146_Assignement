@@ -104,6 +104,7 @@ def main():
     # Launch threads to handle commands and messages from the root node
     threading.Thread(target=handle_cmd, args=(p,)).start()
     threading.Thread(target=sensors_interface, args=(client, p)).start()
+
     # Start the loop, to process the callbacks
     client.loop_forever()
 
