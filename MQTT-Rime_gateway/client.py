@@ -9,7 +9,7 @@ import argparse
 def on_connect_callback(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
 
-# The callnback for when the gateway receives a message from the broker
+# The callback for when the gateway receives a message from the broker
 def on_message_callback(client, userdata, message):
     print("message topic=",message.topic)
     print("payload=" ,str(message.payload.decode("utf-8")))

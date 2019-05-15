@@ -168,7 +168,7 @@ static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t 
 			// Broadcast the new tree
 			send_broadcast_msg(TREE_ADVERTISEMENT);
 		} else if (parent->node_id == payload->source_id)	{
-			int do_bradcast = 0;
+			int do_broadcast = 0;
 			if ((tree_version != payload->tree_version) || (payload->n_hops + 1 != parent->n_hops)) {
 				// Update tree version
 				tree_version = payload->tree_version;

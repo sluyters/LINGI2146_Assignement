@@ -8,10 +8,12 @@ import argparse
 
 # ("subject name", list of sensors, list of receivers)
 topicdict = {
-    0: ("temperature", [], []),
-    1: ("swagdensity", [], []),
-    2: ("whatAmIDoingWithMyLife", [], [])
+    0: ("temperature", [], set()),
+    1: ("swagdensity", [], set()),
+    2: ("whatAmIDoingWithMyLife", [], set())
 }
+
+topicdict_reversed = {}
 
 # TODO Send a SENSOR_CONTROL message to a sensor when a subscriber subscribes to reactivate it
 # TODO Remove sensors after a certain amount of time without SUBSCRIBE or PUBLISH message received from them
@@ -20,14 +22,25 @@ topicdict = {
 def on_connect_callback(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
 
-# The callnback for when the gateway receives a message from the broker
+# The callback for when the gateway receives a message from the broker
 def on_message_callback(client, userdata, message):
-    # TODO Add/remove subscribers
-    print("message topic=",message.topic)
+    msg = str(message.payload.decode("utf-8")).split()
+    print(str(message.payload.decode("utf-8")))
     if message.topic == "$SYS/broker/log/M/subscribe":
-        print("subscribe message received " ,str(message.payload.decode("utf-8")))
+        sub_id = msg[0].strip(':')
+        topic_name = msg[3]
+        print("subscribe message received:", sub_id, topic_name)
+        if topic_name in topicdict_reversed:
+            topicdict[topicdict_reversed[topic_name]][2].add(sub_id)
+            print(len(topicdict[topicdict_reversed[topic_name]][2]))
     elif message.topic == "$SYS/broker/log/M/unsubscribe":
-        print("unsubscribe message received " ,str(message.payload.decode("utf-8")))
+        sub_id = msg[0].strip(':')
+        topic_name = msg[3]
+        print("unsubscribe message received:", sub_id, topic_name)
+        if topic_name in topicdict_reversed:
+            topicdict[topicdict_reversed[topic_name]][2].remove(sub_id)
+            print(len(topicdict[topicdict_reversed[topic_name]][2]))
+    # TODO activate/deactivate sensors if new/no subscriber
 
 def handle_cmd(communication_process):
     while True:
@@ -69,6 +82,10 @@ def sensors_interface(mqttc, communication_process):
     communication_process.terminate()
 
 def main():
+    # Initialize reversed dictionary
+    for key, val in topicdict.items():
+        topicdict_reversed[val[0]] = key
+    
     # Get hostname and serial device from arguments
     # Describe arguments for -help command
     parser = argparse.ArgumentParser(description="MQTT-Rime gateway")
