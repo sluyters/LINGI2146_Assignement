@@ -160,27 +160,29 @@ static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t 
 			}
 			// Add the new parent
 			add_node(&parent, from, payload->source_id, payload->n_hops + 1);
+			// Update tree version + consider the tree as stable
+			tree_version = payload->tree_version;
+			tree_stable = 1;
 			// Send a DESTINATION_ADVERTISEMENT message to the new parent node
 			send_runicast_msg(DESTINATION_ADVERTISEMENT, from);
 			// Broadcast the new tree
 			send_broadcast_msg(TREE_ADVERTISEMENT);
-			// Update tree version + consider the tree as stable
-			tree_version = payload->tree_version;
-			tree_stable = 1;
 		} else if (parent->node_id == payload->source_id)	{
-			// Don't send TREE_ADVERTISEMENT if no relevant information update
+			int do_bradcast = 0;
 			if ((tree_version != payload->tree_version) || (payload->n_hops + 1 != parent->n_hops)) {
-				// Broadcast the new tree
-				send_broadcast_msg(TREE_ADVERTISEMENT);
-				// Update tree version + consider the tree as stable
+				// Update tree version
 				tree_version = payload->tree_version;
+				do_broadcast = 1;
 			}
-			//TODO Move this fucking shit upstair
-
 			// Update the informations of the parent
 			add_node(&parent, from, payload->source_id, payload->n_hops + 1);
 			// Consider the tree as stable
 			tree_stable = 1;
+			// Don't send TREE_ADVERTISEMENT if no relevant information update
+			if (do_broadcast) {
+				// Broadcast the new tree
+				send_broadcast_msg(TREE_ADVERTISEMENT);
+			}
 		}
 	}
 }
