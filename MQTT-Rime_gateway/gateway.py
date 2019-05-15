@@ -89,7 +89,7 @@ def main():
     
     # Set callback function
     client.on_connect = on_connect_callback
-    client.on_message=on_message_callback
+    client.on_message = on_message_callback
 
     # Connect to the broker
     client.connect(host, port=1883, keepalive=60, bind_address="")
