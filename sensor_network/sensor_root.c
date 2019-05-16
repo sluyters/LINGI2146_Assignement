@@ -100,17 +100,13 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 			}
 				
 			// Send TREE_ADVERTISEMENT response
-			struct message msg;
-			struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) malloc(sizeof(struct msg_tree_ad_payload));
-			payload->n_hops = 0;
-			payload->source_id = my_id;
-			payload->tree_version = tree_version;
-			msg.header->length = sizeof(struct msg_tree_ad_payload);
-			msg.payload = payload;
+			struct message *msg = (struct message *) malloc(sizeof(struct message));;
+			get_msg(&msg, TREE_ADVERTISEMENT);
 			char *encoded_msg;
 			uint32_t len = encode_message(&msg, &encoded_msg);
 			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-			runicast_send(&runicast, from, n_retransmissions);	
+			int ret = runicast_send(&runicast, from, n_retransmissions);
+			free(msg);
 			break;
 		default:
 			break;
@@ -170,17 +166,16 @@ PROCESS_THREAD(my_process, ev, data)
 	broadcast_open(&broadcast, 129, &bc);
 
 	// Every 25 to 35 seconds
-	//etimer_set(&et, CLOCK_SECOND * 25 + random_rand() % (CLOCK_SECOND * 10));
-	etimer_set(&et, CLOCK_SECOND * 5 + random_rand() % (CLOCK_SECOND * 5));
+	etimer_set(&et, CLOCK_SECOND * 10 + random_rand() % (CLOCK_SECOND * 5));
 	while (1) {
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
 		// Advertise the tree (broadcast a TREE_ADVERTISEMENT)
 		send_broadcast_msg(TREE_ADVERTISEMENT);
 
-		// Remove childs that have not sent any message since a long time (more than 240 seconds)
-		//remove_expired_nodes(&childs, 240);
-		remove_expired_nodes(&childs, 50);
+		// Remove childs that have not sent any message since a long time (more than 150 seconds)
+		remove_expired_nodes(&childs, 150);
+		// TODO notify the gateway that childs aren't accessible anymore
 		
 		etimer_reset(&et);
 	}

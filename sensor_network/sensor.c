@@ -366,13 +366,11 @@ PROCESS_THREAD(my_process, ev, data)
 	broadcast_open(&broadcast, 129, &broadcast_callbacks);
 
 	// Every 25 to 35 seconds
-	//etimer_set(&et, CLOCK_SECOND * 25 + random_rand() % (CLOCK_SECOND * 10));
-	etimer_set(&et, CLOCK_SECOND * 200 + random_rand() % (CLOCK_SECOND * 150));
+	etimer_set(&et, CLOCK_SECOND * 1200 + random_rand() % (CLOCK_SECOND * 5000));
 	while (1) {
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
-		//remove_expired_nodes(&parent, 90);
-		remove_expired_nodes(&parent, 45); // TODO Conflict risk
+		remove_expired_nodes(&parent, 90); // TODO Conflict risk
 		if (parent == NULL) {
 			tree_stable = 0;
 			// Broadcast a TREE_INFORMATION_REQUEST
@@ -382,9 +380,8 @@ PROCESS_THREAD(my_process, ev, data)
 			send_broadcast_msg(TREE_ADVERTISEMENT);
 		}
 
-		// Remove childs that have not sent any message since a long time (more than 240 seconds)
-		//remove_expired_nodes(&childs, 240);
-		remove_expired_nodes(&childs, 90);	// TODO Conflict risk
+		// Remove childs that have not sent any message since a long time (more than 150 seconds)
+		remove_expired_nodes(&childs, 150);	// TODO Conflict risk
 		
 		etimer_reset(&et);
 	}
@@ -406,9 +403,8 @@ PROCESS_THREAD(sensor_process, ev, data)
 
 	runicast_open(&runicast, 146, &runicast_callbacks);
 	
-	// Every 20 to 40 seconds
-	//etimer_set(&et, CLOCK_SECOND * 20 + random_rand() % (CLOCK_SECOND * 20));
-	etimer_set(&et, CLOCK_SECOND * 300 + random_rand() % (CLOCK_SECOND * 200));
+	// Every 12 - 18 seconds (100 CLOCK_SECONDS ~ 0.5 second)
+	etimer_set(&et, CLOCK_SECOND * 600 + random_rand() % (CLOCK_SECOND * 300));
 	while (1) {
 		iter += 1;
 
@@ -419,7 +415,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 			// TODO generate random sensor data
 			data = 69; // Sensor value
 
-			// Send data
+			// Send data (about every 30 seconds)
 			if ((iter % 2 == 0) && (send_periodically || (data != last_data))) {
 				msg = (struct message *) malloc(sizeof(struct message));	
 				get_msg(msg, SENSOR_DATA);
@@ -440,7 +436,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 			last_data = data;
 		}
 
-		// Send DESTINATION_ADVERTISEMENT to indicate that this node is still up (every 120 seconds)
+		// Send DESTINATION_ADVERTISEMENT to indicate that this node is still up (about every 60 seconds)
 		if ((iter % 4 == 1) && (parent != NULL)) {
 			send_runicast_msg(DESTINATION_ADVERTISEMENT, &(parent->addr_via));
 		}
