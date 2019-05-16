@@ -6,17 +6,18 @@ import paho.mqtt.client as mqtt
 import subprocess
 import argparse
 
-# ("subject name", list of sensors, list of receivers)
+# ("subject name", dictionary of sensors/isActivated, list of receivers)
 topicdict = {
-    0: ("temperature", [], set()),
-    1: ("swagdensity", [], set()),
-    2: ("whatAmIDoingWithMyLife", [], set())
+    0: ("temperature", {}, set()),
+    1: ("swagdensity", {}, set()),
+    2: ("whatAmIDoingWithMyLife", {}, set())
 }
 
 topicdict_reversed = {}
 
-# TODO Send a SENSOR_CONTROL message to a sensor when a subscriber subscribes to reactivate it
 # TODO Remove sensors after a certain amount of time without SUBSCRIBE or PUBLISH message received from them
+
+
 
 # The callback for when the gateway receives a CONNACK response from the broker
 def on_connect_callback(client, userdata, flags, rc):
@@ -26,22 +27,28 @@ def on_connect_callback(client, userdata, flags, rc):
 def on_message_callback(client, userdata, message):
     msg = str(message.payload.decode("utf-8")).split()
     print(str(message.payload.decode("utf-8")))
+    # A client subscribes
     if message.topic == "$SYS/broker/log/M/subscribe":
-        sub_id = msg[0].strip(':')
+        sub_id = msg[1]
         topic_name = msg[3]
         print("subscribe message received:", sub_id, topic_name)
         if topic_name in topicdict_reversed:
+            # Add the subscriber to the list of clients
             topicdict[topicdict_reversed[topic_name]][2].add(sub_id)
             print(len(topicdict[topicdict_reversed[topic_name]][2]))
+    # A client unsubscribes
     elif message.topic == "$SYS/broker/log/M/unsubscribe":
-        sub_id = msg[0].strip(':')
+        sub_id = msg[1]
         topic_name = msg[3]
         print("unsubscribe message received:", sub_id, topic_name)
         if topic_name in topicdict_reversed:
+            # Remove the client from the list of clients
             topicdict[topicdict_reversed[topic_name]][2].remove(sub_id)
             print(len(topicdict[topicdict_reversed[topic_name]][2]))
-    # TODO activate/deactivate sensors if new/no subscriber
 
+
+
+# Function that handles commands written by a user on stdin
 def handle_cmd(communication_process):
     while True:
         cmd = input("Type any command...\n").strip()
@@ -54,6 +61,9 @@ def handle_cmd(communication_process):
         else:
             print("Unknown command. Try typing SEND PERIODICALLY or SEND ON CHANGE")
 
+
+
+# Function that handles communication between the sensor network, this gateway and the broker
 def sensors_interface(mqttc, communication_process):
     # Start serialdump tool, read each line
     for line in communication_process.stdout:
@@ -64,10 +74,16 @@ def sensors_interface(mqttc, communication_process):
             msg_content = data[3]
             # Add the sensor to the list of sensors for this subject
             if sensor_id not in topicdict[subject_id][1]:
-                topicdict[subject_id][1].append(sensor_id)
+                topicdict[subject_id][1][sensor_id] = False
             # If no subscriber, send a control message to stop sending data, else publish data
             if len(topicdict[subject_id][2]) == 0:
+                # Set the sensor as deactivated + send a control message to deactivate it
+                topicdict[subject_id][1][sensor_id] = False
                 communication_process.stdin.write("1 0 {:d}\n".format(sensor_id))
+            elif topicdict[subject_id][1][sensor_id] == False:
+                # Set the sensor as active + re-send a control message to activate it to make sure that the sensor is indeed activated 
+                topicdict[subject_id][1][sensor_id] = True
+                communication_process.stdin.write("1 1 {:d}\n".format(sensor_id))
             else:
                 mqttc.publish(topicdict[subject_id][0], payload=msg_content, qos=0, retain=False)
         elif data[0] == "ADVERTISE":
@@ -75,11 +91,19 @@ def sensors_interface(mqttc, communication_process):
             subject_id = int(data[2])
             # Add the sensor to the list of sensors for this subject
             if sensor_id not in topicdict[subject_id][1]:
-                topicdict[subject_id][1].append(sensor_id)
+                topicdict[subject_id][1][sensor_id] = False
                 # If no subscriber, send a control message to stop sending data
-                if len(topicdict[subject_id][2]) == 0:
+            if len(topicdict[subject_id][2]) == 0:
+                if (topicdict[subject_id][1][sensor_id] == True):
+                    # Set the sensor as deactivated + send a control message to deactivate it
+                    topicdict[subject_id][1][sensor_id] = False
                     communication_process.stdin.write("1 0 {:d}\n".format(sensor_id))
+            elif topicdict[subject_id][1][sensor_id] == False:
+                # Send a control message to activate the sensor 
+                communication_process.stdin.write("1 1 {:d}\n".format(sensor_id))
     communication_process.terminate()
+
+
 
 def main():
     # Initialize reversed dictionary
@@ -124,6 +148,8 @@ def main():
 
     # Start the loop, to process the callbacks
     client.loop_forever()
+
+
 
 if __name__ == '__main__':
     main()
