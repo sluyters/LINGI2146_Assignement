@@ -101,6 +101,13 @@ def sensors_interface(mqttc, communication_process):
             elif topicdict[subject_id][1][sensor_id] == False:
                 # Send a control message to activate the sensor 
                 communication_process.stdin.write("1 1 {:d}\n".format(sensor_id))
+        elif data[0] == "DELETE":
+            sensor_id = int(data[1])
+            # Remove the sensor from each subject
+            print("Removing sensor {:d}".format(sensor_id))
+            for key, val in topicdict.items():
+                val[1].pop(sensor_id, None)
+                
     communication_process.terminate()
 
 

@@ -5,8 +5,6 @@ import time
 import paho.mqtt.client as mqtt
 import argparse
 
-# TODO payload in hex -> transform in int
-
 # The callback for when the gateway receives a CONNACK response from the broker
 def on_connect_callback(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
@@ -14,7 +12,7 @@ def on_connect_callback(client, userdata, flags, rc):
 # The callback for when the gateway receives a message from the broker
 def on_message_callback(client, userdata, message):
     print("message topic=",message.topic)
-    print("payload=" ,str(message.payload.decode("utf-8")))
+    print("payload=", str(message.payload.decode("utf-8")))
 
 def main():
     # Describe arguments for -help command

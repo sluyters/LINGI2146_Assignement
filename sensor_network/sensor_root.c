@@ -137,7 +137,7 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from, uint8
 			struct msg_data_payload *current_payload = (struct msg_data_payload *) decoded_msg->payload;
 			// Go through each data in the message
 			while(current_payload != NULL) {
-				printf("PUBLISH %d %d %s\n", current_payload->data_header->source_id, current_payload->data_header->subject_id, (char *) current_payload->data);
+				printf("PUBLISH %d %d %d\n", current_payload->data_header->source_id, current_payload->data_header->subject_id, *((int *) current_payload->data));
 				current_payload = current_payload->next;
 			}
 			break;

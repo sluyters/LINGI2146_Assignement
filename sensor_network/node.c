@@ -87,8 +87,8 @@ void remove_expired_nodes(struct node **nodes, int max_elapsed_secs) {
 	int now = (unsigned long) clock_seconds();
 	struct node *deleted_node;
 	while (*nodes != NULL && (now - (*nodes)->timestamp > max_elapsed_secs)) {
-		printf("Deleting child\n");
 		deleted_node = *nodes;
+		printf("DELETE %d\n", deleted_node->node_id);
 		*nodes = (*nodes)->next;
 		free(deleted_node);
 	}
