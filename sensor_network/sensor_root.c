@@ -88,29 +88,12 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 	char *encoded_msg = packetbuf_dataptr();
 	struct message *decoded_msg;
 	decode_message(&decoded_msg, encoded_msg, packetbuf_datalen());
-	
-	switch (decoded_msg->header->msg_type) {
-		case TREE_INFORMATION_REQUEST:;
-			// If the tree needs rebuilding, increment the tree version 
-			printf("Received TREE_INFO_REQ\n");
-			struct msg_tree_request_payload *payload_info_req = (struct msg_tree_request_payload *) decoded_msg->payload;
-			if (((payload_info_req->request_attributes & 0x1) == 0x1) && (payload_info_req->tree_version == tree_version)) {
-				printf("Received TREE_INFO_REQ (version increase)\n");
-				tree_version++;
-			}
-				
-			// Send TREE_ADVERTISEMENT response
-			struct message *msg = (struct message *) malloc(sizeof(struct message));;
-			get_msg(&msg, TREE_ADVERTISEMENT);
-			char *encoded_msg;
-			uint32_t len = encode_message(&msg, &encoded_msg);
-			packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
-			int ret = runicast_send(&runicast, from, n_retransmissions);
-			free(msg);
-			break;
-		default:
-			break;
-	}
+
+	struct process_msg_comm *data = (struct process_msg_comm *) malloc(sizeof(struct process_msg_comm));
+	rimeaddr_copy(&(data->from), from);
+	data->msg = decoded_msg;
+
+	process_post(&broadcast_handling_process, PROCESS_EVENT_MSG, data);
 }
 
 // Set the function to be called when a broadcast message is received
@@ -124,28 +107,11 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from, uint8
 	struct message *decoded_msg;
 	decode_message(&decoded_msg, encoded_msg, packetbuf_datalen());
 
-	switch (decoded_msg->header->msg_type) {
-		case DESTINATION_ADVERTISEMENT:;
-			struct msg_dest_ad_payload *payload_dest_ad = (struct msg_dest_ad_payload *) decoded_msg->payload;
-			// Add to list of childs (or update)
-			add_node(&childs, from, payload_dest_ad->source_id, 0);
-			// Send the info to the gateway
-			printf("ADVERTISE %d %d\n", payload_dest_ad->source_id, payload_dest_ad->subject_id);
-			break;
-		case SENSOR_DATA:;
-			// Send data to the gateway.
-			struct msg_data_payload *current_payload = (struct msg_data_payload *) decoded_msg->payload;
-			// Go through each data in the message
-			while(current_payload != NULL) {
-				printf("PUBLISH %d %d %d\n", current_payload->data_header->source_id, current_payload->data_header->subject_id, *((int *) current_payload->data));
-				current_payload = current_payload->next;
-			}
-			break;
-		default:
-			break;
-	}
+	struct process_msg_comm *data = (struct process_msg_comm *) malloc(sizeof(struct process_msg_comm));
+	rimeaddr_copy(&(data->from), from);
+	data->msg = decoded_msg;
 
-	free_message(decoded_msg);
+	process_post(&runicast_handling_process, PROCESS_EVENT_MSG, decoded_msg);
 }
 
 // Set the function to be called when a broadcast message is received
@@ -277,6 +243,91 @@ PROCESS_THREAD(gateway_process, ev, data)
 				}
 			}
 			free_message(msg);
+		}
+	}
+
+	PROCESS_END();
+}
+
+
+PROCESS_THREAD(broadcast_handling_process, ev, data)
+{
+	PROCESS_BEGIN();
+
+	while(1) {
+		PROCESS_WAIT_EVENT();
+
+		if(ev == PROCESS_EVENT_MSG) {
+			struct process_msg_comm *recv_data = (struct process_msg_comm *) data;
+			struct msg *decoded_msg = recv_data->msg;
+			struct rimeaddr_t *from = &(recv_data->from);
+
+			switch (decoded_msg->header->msg_type) {
+				case TREE_INFORMATION_REQUEST:;
+					// If the tree needs rebuilding, increment the tree version 
+					printf("Received TREE_INFO_REQ\n");
+					struct msg_tree_request_payload *payload_info_req = (struct msg_tree_request_payload *) decoded_msg->payload;
+					if (((payload_info_req->request_attributes & 0x1) == 0x1) && (payload_info_req->tree_version == tree_version)) {
+						printf("Received TREE_INFO_REQ (version increase)\n");
+						tree_version++;
+					}
+						
+					// Send TREE_ADVERTISEMENT response
+					struct message *msg = (struct message *) malloc(sizeof(struct message));;
+					get_msg(msg, TREE_ADVERTISEMENT);
+					char *encoded_msg;
+					uint32_t len = encode_message(&msg, &encoded_msg);
+					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
+					int ret = runicast_send(&runicast, from, n_retransmissions);
+					free(msg);
+					break;
+				default:
+					break;
+			}
+
+			free_message(decoded_msg);
+			free(recv_data);
+		}
+	}
+
+	PROCESS_END();
+}
+
+PROCESS_THREAD(runicast_handling_process, ev, data)
+{
+	PROCESS_BEGIN();
+
+	while(1) {
+		PROCESS_WAIT_EVENT();
+
+		if(ev == PROCESS_EVENT_MSG) {
+			struct process_msg_comm *recv_data = (struct process_msg_comm *) data;
+			struct msg *decoded_msg = recv_data->msg;
+			struct rimeaddr_t *from = &(recv_data->from);
+
+			switch (decoded_msg->header->msg_type) {
+				case DESTINATION_ADVERTISEMENT:;
+					struct msg_dest_ad_payload *payload_dest_ad = (struct msg_dest_ad_payload *) decoded_msg->payload;
+					// Add to list of childs (or update)
+					add_node(&childs, from, payload_dest_ad->source_id, 0);
+					// Send the info to the gateway
+					printf("ADVERTISE %d %d\n", payload_dest_ad->source_id, payload_dest_ad->subject_id);
+					break;
+				case SENSOR_DATA:;
+					// Send data to the gateway.
+					struct msg_data_payload *current_payload = (struct msg_data_payload *) decoded_msg->payload;
+					// Go through each data in the message
+					while(current_payload != NULL) {
+						printf("PUBLISH %d %d %d\n", current_payload->data_header->source_id, current_payload->data_header->subject_id, *((int *) current_payload->data));
+						current_payload = current_payload->next;
+					}
+					break;
+				default:
+					break;
+			}
+
+			free_message(decoded_msg);
+			free(recv_data);
 		}
 	}
 
