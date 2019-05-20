@@ -1,3 +1,11 @@
+/*
+ * This file represents a ist of nodes (sensors)
+ * Authors: 
+ * BOSCH Sami 		- 26821500
+ * SIMON Benjamin 	- 37151500
+ * SLUYTERS Arthur	- 13151500
+ */
+
 #include "node.h"
 
 void clock_library_init(void) {

@@ -1,3 +1,11 @@
+/*
+ * This header file represents messages and their operations
+ * Authors: 
+ * BOSCH Sami 		- 26821500
+ * SIMON Benjamin 	- 37151500
+ * SLUYTERS Arthur	- 13151500
+ */
+
 #include "contiki.h"
 #include "contiki-lib.h"
 #include "contiki-net.h"

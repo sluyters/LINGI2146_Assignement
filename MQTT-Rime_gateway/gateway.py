@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+# This file represents the MQTT-Rime Gateway
+# Authors: 
+# BOSCH Sami 		- 26821500
+# SIMON Benjamin 	- 37151500
+# SLUYTERS Arthur	- 13151500
+
 import threading
 import time
 import paho.mqtt.client as mqtt

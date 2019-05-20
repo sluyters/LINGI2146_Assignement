@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 
-#import threading
+# This file represents a MQTT client
+# Authors: 
+# BOSCH Sami 		- 26821500
+# SIMON Benjamin 	- 37151500
+# SLUYTERS Arthur	- 13151500
+
 import time
 import paho.mqtt.client as mqtt
 import argparse

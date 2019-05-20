@@ -1,3 +1,11 @@
+/*
+ * This file represents messages and their operations
+ * Authors: 
+ * BOSCH Sami 		- 26821500
+ * SIMON Benjamin 	- 37151500
+ * SLUYTERS Arthur	- 13151500
+ */
+
 #include "message.h"
 
 uint32_t encode_message(struct message *decoded_msg, char **encoded_msg) {

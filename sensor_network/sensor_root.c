@@ -1,3 +1,11 @@
+/*
+ * This file represents the root of the sensor tree.
+ * Authors: 
+ * BOSCH Sami 		- 26821500
+ * SIMON Benjamin 	- 37151500
+ * SLUYTERS Arthur	- 13151500
+ */
+
 #include "contiki.h"
 #include "contiki-lib.h"
 #include "contiki-net.h"
@@ -32,15 +40,13 @@ uint8_t tree_version = 0;
 
 /*-----------------------------------------------------------------------------*/
 /* Declaration of the processes */
-PROCESS(my_process, "My process");
+PROCESS(tree_process, "My process");
 PROCESS(gateway_process, "Gateway process");
-AUTOSTART_PROCESSES(&my_process, &gateway_process);
-
-// TODO Prevent concurrent access issues
-// TODO Fix memory leaks
+AUTOSTART_PROCESSES(&tree_process, &gateway_process);
 
 /*-----------------------------------------------------------------------------*/
 /* Helper funcions */
+
 
 /**
  * Initializes a simple message of type @msg_type
@@ -67,6 +73,7 @@ static void get_msg(struct message *msg, int msg_type) {
 	}
 }
 
+
 /**
  * Sends a simple broadcast message of type @msg_type
  */ 
@@ -80,6 +87,7 @@ static void send_broadcast_msg(int msg_type) {
 	free(encoded_msg);
 	free_message(msg);
 }
+
 
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a broadcast message is received */
@@ -116,6 +124,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 // Set the function to be called when a broadcast message is received
 static const struct broadcast_callbacks bc = {broadcast_recv};
 
+
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a runicast message is received */
 static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from, uint8_t seqno) {
@@ -151,9 +160,14 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from, uint8
 // Set the function to be called when a broadcast message is received
 static const struct runicast_callbacks rc = {runicast_recv};
 
+
 /*-----------------------------------------------------------------------------*/
-/* Process */
-PROCESS_THREAD(my_process, ev, data)
+/* Processes */
+
+/**
+ * Process that handles tree building and updating 
+ */
+PROCESS_THREAD(tree_process, ev, data)
 {
 	static struct etimer et;
 
@@ -175,7 +189,6 @@ PROCESS_THREAD(my_process, ev, data)
 
 		// Remove childs that have not sent any message since a long time (more than 150 seconds)
 		remove_expired_nodes(&childs, 150);
-		// TODO notify the gateway that childs aren't accessible anymore
 		
 		etimer_reset(&et);
 	}
@@ -183,6 +196,9 @@ PROCESS_THREAD(my_process, ev, data)
 	PROCESS_END();
 }
 
+/**
+ * Process that handles communication with the MQTT-Rime gateway
+ */
 PROCESS_THREAD(gateway_process, ev, data)
 {
 	PROCESS_EXITHANDLER(runicast_close(&runicast);)

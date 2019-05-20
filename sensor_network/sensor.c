@@ -1,5 +1,9 @@
 /*
- * GOOD LINK SYMPA https://github.com/contiki-os/contiki/blob/master/examples/rime/example-neighbors.c
+ * This file represents a node in the sensor tree.
+ * Authors: 
+ * BOSCH Sami 		- 26821500
+ * SIMON Benjamin 	- 37151500
+ * SLUYTERS Arthur	- 13151500
  */
 
 #include "contiki.h"
@@ -41,7 +45,7 @@ struct node *parent = NULL;
 struct node *childs = NULL;
 
 /*-----------------------------------------------------------------------------*/
-uint8_t my_id = 29; // TODO Modify this
+uint8_t my_id = 29;
 uint8_t my_subject_id = 0;
 uint8_t tree_version = 0; 
 int tree_stable = 0; // A the beginning, the tree is not stable 
@@ -53,12 +57,13 @@ struct ctimer aggregate_ctimer;
 
 /*-----------------------------------------------------------------------------*/
 /* Declaration of the processes */
-PROCESS(my_process, "My process");
+PROCESS(tree_process, "My process");
 PROCESS(sensor_process, "Sensor process");
-AUTOSTART_PROCESSES(&my_process, &sensor_process);
+AUTOSTART_PROCESSES(&tree_process, &sensor_process);
 
 /*-----------------------------------------------------------------------------*/
 /* Helper functions */
+
 
 /* Callback function when the time of aggregate messages ends */
 static void send_aggregate_msg(void *ptr) {
@@ -71,9 +76,6 @@ static void send_aggregate_msg(void *ptr) {
 	data_aggregate_msg = NULL;
 }
 
-// TODO problem with runicast transmitting while trying to send other things -> create a list of messages to send, and send them from one process ?
-
-// TODO fix bug where the correct data is not correctly sent / aggregated / transmitted and results in corrupted data at the root node
 
 /**
  * Initializes a simple message of type @msg_type
@@ -119,6 +121,7 @@ static void get_msg(struct message *msg, int msg_type) {
 	}
 }
 
+
 /**
  * Sends a simple broadcast message of type @msg_type
  */ 
@@ -132,6 +135,7 @@ static void send_broadcast_msg(int msg_type) {
 	free(encoded_msg);
 	free_message(msg);
 }
+
 
 /**
  * Sends a simple runicast message of type @msg_type to @addr_dest
@@ -148,6 +152,9 @@ static void send_runicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
 }
 
 
+/**
+ * Fucnction that handles tree advertisement messages.
+ */ 
 static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t *from) {
 	// Check version, if version >= local version, process the TREE_ADVERTISEMENT message, don't accept TREE_ADVERTISEMENT with same tree_version if the tree is not stable
 	struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) msg->payload;
@@ -188,8 +195,10 @@ static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t 
 }
 
 
+/**
+ * Function that handles data messages. Determines if the message should be sent immediately or aggregated 
+ */ 
 static void handle_sensor_data_msg(struct message *msg) {
-
 	struct msg_data_payload *d_payload = (struct msg_data_payload *) msg->payload;
 	while (d_payload != NULL) {
 		printf("Data %d %d %s\n", d_payload->data_header->source_id, d_payload->data_header->subject_id, (char *) d_payload->data);
@@ -197,7 +206,6 @@ static void handle_sensor_data_msg(struct message *msg) {
 	}
 	
 	if (childs == NULL) {
-		// TODO why no child ?
 		printf("Transfer data - No childs\n");
 		// If no child, send data directly (no need to aggregate)
 		char *encoded_msg;
@@ -233,6 +241,7 @@ static void handle_sensor_data_msg(struct message *msg) {
 		msg->payload = NULL; // Avoid conflits when freeing the message
 	}
 }
+
 
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a broadcast message is received */
@@ -289,6 +298,7 @@ static void broadcast_recv(struct broadcast_conn *c, const rimeaddr_t *from) {
 
 // Set the function to be called when a broadcast message is received
 static const struct broadcast_callbacks broadcast_callbacks = {broadcast_recv};
+
 
 /*-----------------------------------------------------------------------------*/
 /* Callback function when a runicast message is received */
@@ -348,9 +358,14 @@ static void runicast_recv(struct runicast_conn *c, const rimeaddr_t *from, uint8
 // Set the function to be called when a broadcast message is received
 static const struct runicast_callbacks runicast_callbacks = {runicast_recv};
 
+
 /*-----------------------------------------------------------------------------*/
-/* Process */
-PROCESS_THREAD(my_process, ev, data)
+/* Processes */
+
+/**
+ * Process that handles tree building and updating 
+ */
+PROCESS_THREAD(tree_process, ev, data)
 {
 	static struct etimer et;
 
@@ -370,7 +385,7 @@ PROCESS_THREAD(my_process, ev, data)
 	while (1) {
     	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
-		remove_expired_nodes(&parent, 90); // TODO Conflict risk
+		remove_expired_nodes(&parent, 90);
 		if (parent == NULL) {
 			tree_stable = 0;
 			// Broadcast a TREE_INFORMATION_REQUEST
@@ -381,18 +396,24 @@ PROCESS_THREAD(my_process, ev, data)
 		}
 
 		// Remove childs that have not sent any message since a long time (more than 150 seconds)
-		remove_expired_nodes(&childs, 150);	// TODO Conflict risk
+		remove_expired_nodes(&childs, 150);
 		
 		etimer_reset(&et);
 	}
 
 	PROCESS_END();
 }
+
+
+/**
+ * Process that handles data generation and regularly sending destination advertisements
+ */
 uint8_t iter = 0;
 int last_data = -1;
 int data;
 struct message *msg;
 struct msg_data_payload *payload ;
+
 PROCESS_THREAD(sensor_process, ev, data)
 {
 	static struct etimer et;
@@ -430,7 +451,7 @@ PROCESS_THREAD(sensor_process, ev, data)
 				msg->header->length = sizeof(struct msg_data_payload_h) + sizeof(int);
 				msg->payload = payload;
 
-				handle_sensor_data_msg(msg);	// TODO Conflict risk
+				handle_sensor_data_msg(msg);
 				free_message(msg);
 			}
 			last_data = data;
