@@ -34,10 +34,18 @@ uint8_t tree_version = 0;
 /* Declaration of the processes */
 PROCESS(my_process, "My process");
 PROCESS(gateway_process, "Gateway process");
-AUTOSTART_PROCESSES(&my_process, &gateway_process);
+PROCESS(broadcast_handling_process, "Broadcast handling process");
+PROCESS(runicast_handling_process, "Broadcast handling process");
+AUTOSTART_PROCESSES(&my_process, &gateway_process, &broadcast_handling_process, &runicast_handling_process);
 
 // TODO Prevent concurrent access issues
 // TODO Fix memory leaks
+
+
+struct process_msg_comm {
+	rimeaddr_t from;
+	struct message *msg;
+};
 
 /*-----------------------------------------------------------------------------*/
 /* Helper funcions */
@@ -259,8 +267,8 @@ PROCESS_THREAD(broadcast_handling_process, ev, data)
 
 		if(ev == PROCESS_EVENT_MSG) {
 			struct process_msg_comm *recv_data = (struct process_msg_comm *) data;
-			struct msg *decoded_msg = recv_data->msg;
-			struct rimeaddr_t *from = &(recv_data->from);
+			struct message *decoded_msg = recv_data->msg;
+			rimeaddr_t *from = &(recv_data->from);
 
 			switch (decoded_msg->header->msg_type) {
 				case TREE_INFORMATION_REQUEST:;
@@ -276,7 +284,7 @@ PROCESS_THREAD(broadcast_handling_process, ev, data)
 					struct message *msg = (struct message *) malloc(sizeof(struct message));;
 					get_msg(msg, TREE_ADVERTISEMENT);
 					char *encoded_msg;
-					uint32_t len = encode_message(&msg, &encoded_msg);
+					uint32_t len = encode_message(msg, &encoded_msg);
 					packetbuf_copyfrom(encoded_msg, len);	// Put data inside the packet
 					int ret = runicast_send(&runicast, from, n_retransmissions);
 					free(msg);
@@ -302,8 +310,8 @@ PROCESS_THREAD(runicast_handling_process, ev, data)
 
 		if(ev == PROCESS_EVENT_MSG) {
 			struct process_msg_comm *recv_data = (struct process_msg_comm *) data;
-			struct msg *decoded_msg = recv_data->msg;
-			struct rimeaddr_t *from = &(recv_data->from);
+			struct message *decoded_msg = recv_data->msg;
+			rimeaddr_t *from = &(recv_data->from);
 
 			switch (decoded_msg->header->msg_type) {
 				case DESTINATION_ADVERTISEMENT:;

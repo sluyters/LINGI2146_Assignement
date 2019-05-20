@@ -138,7 +138,7 @@ static void send_broadcast_msg(int msg_type) {
 /**
  * Sends a simple runicast message of type @msg_type to @addr_dest
  */ 
-static void send_runicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
+static void send_runicast_msg(int msg_type, rimeaddr_t *addr_dest) {
 	struct message *msg = (struct message *) malloc(sizeof(struct message));
 	char *encoded_msg;	
 	get_msg(msg, msg_type);
@@ -150,7 +150,7 @@ static void send_runicast_msg(int msg_type, const rimeaddr_t *addr_dest) {
 }
 
 
-static void handle_tree_advertisement_msg(struct message *msg, const rimeaddr_t *from) {
+static void handle_tree_advertisement_msg(struct message *msg, rimeaddr_t *from) {
 	// Check version, if version >= local version, process the TREE_ADVERTISEMENT message, don't accept TREE_ADVERTISEMENT with same tree_version if the tree is not stable
 	struct msg_tree_ad_payload *payload = (struct msg_tree_ad_payload *) msg->payload;
 	printf("Received TREE_AD TreeV:%d Src:%d Nhops:%d\n", payload->tree_version, payload->source_id, payload->n_hops);
@@ -383,8 +383,8 @@ PROCESS_THREAD(broadcast_handling_process, ev, data)
 		PROCESS_WAIT_EVENT();
 
 		struct process_msg_comm *recv_data = (struct process_msg_comm *) data;
-		struct msg *decoded_msg = recv_data->msg;
-		struct rimeaddr_t *from = &(recv_data->from);
+		struct message *decoded_msg = recv_data->msg;
+		rimeaddr_t *from = &(recv_data->from);
 
 		switch (decoded_msg->header->msg_type) {
 			case TREE_INFORMATION_REQUEST:;
@@ -394,8 +394,11 @@ PROCESS_THREAD(broadcast_handling_process, ev, data)
 				if (((payload_info_req->request_attributes & 0x1) == 0x1) && ((payload_info_req->tree_version > tree_version) || (tree_stable && payload_info_req->tree_version == tree_version))) {
 					tree_stable = 0;
 					// Broadcast TREE_INFORMATION_REQUEST message to destroy the tree
-					packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
+					char *encoded_msg;	
+					uint32_t len = encode_message(decoded_msg, &encoded_msg);
+					packetbuf_copyfrom(encoded_msg, len);
 					broadcast_send(&broadcast);
+					free(encoded_msg);
 				} else if ((parent != NULL) && (payload_info_req->tree_version <= tree_version)) {
 					// Send TREE_ADVERTISEMENT response
 					send_runicast_msg(TREE_ADVERTISEMENT, from);
@@ -418,11 +421,11 @@ PROCESS_THREAD(broadcast_handling_process, ev, data)
 					payload_ctrl->destination_id += 1; 
 					// Forward control message to childs
 					if (childs != NULL) {
-						char *encoded_msg2;	
-						uint32_t len = encode_message(decoded_msg, &encoded_msg2);
-						packetbuf_copyfrom(encoded_msg2, len);
+						char *encoded_msg;	
+						uint32_t len = encode_message(decoded_msg, &encoded_msg);
+						packetbuf_copyfrom(encoded_msg, len);
 						broadcast_send(&broadcast);
-						free(encoded_msg2);
+						free(encoded_msg);
 					}
 				}
 			default:
@@ -443,8 +446,8 @@ PROCESS_THREAD(runicast_handling_process, ev, data)
 		PROCESS_WAIT_EVENT();
 
 		struct process_msg_comm *recv_data = (struct process_msg_comm *) data;
-		struct msg *decoded_msg = recv_data->msg;
-		struct rimeaddr_t *from = &(recv_data->from);
+		struct message *decoded_msg = recv_data->msg;
+		rimeaddr_t *from = &(recv_data->from);
 
 		switch (decoded_msg->header->msg_type) {
 			case DESTINATION_ADVERTISEMENT:;
@@ -455,9 +458,12 @@ PROCESS_THREAD(runicast_handling_process, ev, data)
 					// Add to list of childs (or update)
 					add_node(&childs, from, payload_dest_ad->source_id, 0);
 					// Forward message to parent
-					packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
+					char *encoded_msg;	
+					uint32_t len = encode_message(decoded_msg, &encoded_msg);
+					packetbuf_copyfrom(encoded_msg, len);
 					int ret = runicast_send(&runicast, &(parent->addr_via), n_retransmissions);
 					printf("Received DEST_AD (forwarded) TreeV:%d Src:%d Ret:%d\n", payload_dest_ad->tree_version, payload_dest_ad->source_id, ret);
+					free(encoded_msg);
 				}
 				break;
 			case SENSOR_DATA:
@@ -479,8 +485,11 @@ PROCESS_THREAD(runicast_handling_process, ev, data)
 					struct node* child = get_node(childs, payload_ctrl->destination_id);
 					if (child != NULL) {
 						// Forward control message to child
-						packetbuf_copyfrom(encoded_msg, packetbuf_datalen());
-						runicast_send(&runicast, &(child->addr_via), n_retransmissions);
+						char *encoded_msg;	
+						uint32_t len = encode_message(decoded_msg, &encoded_msg);
+						packetbuf_copyfrom(encoded_msg, len);
+						runicast_send(&runicast, &(parent->addr_via), n_retransmissions);
+						free(encoded_msg);
 					}
 				}
 				break;
