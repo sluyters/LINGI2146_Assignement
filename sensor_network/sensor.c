@@ -56,7 +56,8 @@ struct ctimer aggregate_ctimer;
 PROCESS(my_process, "My process");
 PROCESS(sensor_process, "Sensor process");
 PROCESS(broadcast_handling_process, "Broadcast handling process");
-AUTOSTART_PROCESSES(&my_process, &sensor_process, &broadcast_handling_process);
+PROCESS(runicast_handling_process, "Broadcast handling process");
+AUTOSTART_PROCESSES(&my_process, &sensor_process, &broadcast_handling_process, &runicast_handling_process);
 
 /*-----------------------------------------------------------------------------*/
 /* Helper functions */
@@ -381,8 +382,10 @@ PROCESS_THREAD(broadcast_handling_process, ev, data)
 	while(1) {
 		PROCESS_WAIT_EVENT();
 
-		struct msg *decoded_msg = (struct msg *) data;
-		struct rimeaddr_t *from = (struct rimeaddr_t *from);
+		struct process_msg_comm *recv_data = (struct process_msg_comm *) data;
+		struct msg *decoded_msg = recv_data->msg;
+		struct rimeaddr_t *from = &(recv_data->from);
+
 		switch (decoded_msg->header->msg_type) {
 			case TREE_INFORMATION_REQUEST:;
 				printf("Received TREE_INFO_REQ (broadcast)\n");
@@ -426,6 +429,7 @@ PROCESS_THREAD(broadcast_handling_process, ev, data)
 				break;
 		}
 		free_message(decoded_msg);
+		free(recv_data);
 	}
 
 	PROCESS_END();
@@ -437,6 +441,7 @@ PROCESS_THREAD(runicast_handling_process, ev, data)
 
 	while(1) {
 		PROCESS_WAIT_EVENT();
+
 		struct process_msg_comm *recv_data = (struct process_msg_comm *) data;
 		struct msg *decoded_msg = recv_data->msg;
 		struct rimeaddr_t *from = &(recv_data->from);

@@ -7,7 +7,7 @@ void clock_library_init(void) {
 /**
  * Adds the new node to the @nodes list, or update its data if it is already present
  */
-void add_node(struct node **nodes, const rimeaddr_t *addr_via, uint8_t node_id, uint8_t n_hops) {
+void add_node(struct node **nodes, rimeaddr_t *addr_via, uint8_t node_id, uint8_t n_hops) {
 	if (*nodes == NULL) {
 		// If the list is empty, create a new node
 		*nodes = (struct node *) malloc(sizeof(struct node));
