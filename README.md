@@ -1,6 +1,6 @@
-#Assignement for the LINGI2146 course.
+# Assignement for the LINGI2146 course.
 
-Sami BOSCH, Benjamin SIMON, Arthur SLUYTERS
+*Sami BOSCH, Benjamin SIMON, Arthur SLUYTERS*
 
 Running the project requires the following tools:
 * **Contiki 2.7** - we did not test the project with other versions of contiki.
