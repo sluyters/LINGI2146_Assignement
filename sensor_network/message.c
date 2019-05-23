@@ -11,7 +11,7 @@
 uint32_t encode_message(struct message *decoded_msg, char **encoded_msg) {
 	uint32_t length = decoded_msg->header->length + sizeof(struct msg_header);
 	// Allocate memory for encoded message
-	*encoded_msg = (char *) malloc(length); // TODO make allocation outside of the function ?
+	*encoded_msg = (char *) malloc(length);
 	int offset = 0;
 	// Encode the header
 	memcpy(*encoded_msg, (void *) decoded_msg->header, sizeof(struct msg_header));
@@ -39,7 +39,7 @@ uint32_t encode_message(struct message *decoded_msg, char **encoded_msg) {
 void decode_message(struct message **decoded_msg, char *encoded_msg, uint16_t msg_len) {
 	int offset = 0;
 	// Allocate memory for decoded message
-	struct message *new_msg = (struct message *) malloc(sizeof(struct message));	// TODO make allocation outside of the function
+	struct message *new_msg = (struct message *) malloc(sizeof(struct message));
 	new_msg->header = (struct msg_header *) malloc(sizeof(struct msg_header));
 	// Decode the header
 	memcpy(new_msg->header, (void *) encoded_msg, sizeof(struct msg_header));
